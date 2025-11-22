@@ -81,7 +81,10 @@ async fn test_model_one_time_use() {
 
     // Send CreateMatching
     let create_msg = json!({
-        "type": "CreateMatching"
+        "type": "CreateMatching",
+        "data": {
+            "username": null
+        }
     });
     write
         .send(Message::Text(create_msg.to_string().into()))

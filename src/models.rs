@@ -54,6 +54,7 @@ impl Character {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
     pub id: String,                        // プレイヤーID
+    pub username: Option<String>,          // ユーザー名
     pub selected_model_id: Option<String>, // マッチング作成/参加時に選択したモデルID
     pub character: Option<Character>,      // 選択したキャラクター
     pub ready: bool,                       // 準備完了フラグ
@@ -63,6 +64,17 @@ impl Player {
     pub fn new(id: String) -> Self {
         Self {
             id,
+            username: None,
+            selected_model_id: None,
+            character: None,
+            ready: false,
+        }
+    }
+
+    pub fn new_with_username(id: String, username: Option<String>) -> Self {
+        Self {
+            id,
+            username,
             selected_model_id: None,
             character: None,
             ready: false,
@@ -84,6 +96,7 @@ pub enum MatchingStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchingSession {
     pub matching_id: Uuid,
+    pub creator_username: Option<String>, // 作成者のユーザー名
     pub player_a: Player,
     pub player_b: Option<Player>,
     pub status: MatchingStatus,
@@ -97,7 +110,22 @@ impl MatchingSession {
     pub fn new(player_a_id: String) -> Self {
         Self {
             matching_id: Uuid::new_v4(),
+            creator_username: None,
             player_a: Player::new(player_a_id),
+            player_b: None,
+            status: MatchingStatus::Waiting,
+            created_at: Utc::now(),
+            last_active_at: None,
+            is_battle_started: false,
+            is_battle_finished: false,
+        }
+    }
+
+    pub fn new_with_username(player_a_id: String, username: Option<String>) -> Self {
+        Self {
+            matching_id: Uuid::new_v4(),
+            creator_username: username.clone(),
+            player_a: Player::new_with_username(player_a_id, username),
             player_b: None,
             status: MatchingStatus::Waiting,
             created_at: Utc::now(),
@@ -168,12 +196,23 @@ pub struct GameResult {
     pub finished_at: DateTime<Utc>,
 }
 
+// マッチング情報（一覧表示用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchingInfo {
+    pub matching_id: Uuid,
+    pub creator_username: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub status: MatchingStatus,
+}
+
 // WebSocketメッセージ種別
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum WsMessage {
     // クライアント→サーバー
-    CreateMatching, // マッチング作成要求
+    CreateMatching {
+        username: Option<String>,
+    }, // マッチング作成要求
     JoinMatch {
         matching_id: Uuid,
     }, // マッチング参加要求
@@ -191,11 +230,11 @@ pub enum WsMessage {
     // サーバー→クライアント
     MatchingCreated {
         matching_id: Uuid,
-        current_matchings: Vec<Uuid>, // 自分以外のマッチング一覧
+        current_matchings: Vec<MatchingInfo>, // 自分以外のマッチング一覧
         timestamp: DateTime<Utc>,
     },
     UpdateMatchings {
-        current_matchings: Vec<Uuid>, // 現在のマッチング一覧
+        current_matchings: Vec<MatchingInfo>, // 現在のマッチング一覧
         timestamp: DateTime<Utc>,
     },
     MatchingEstablished {

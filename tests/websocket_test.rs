@@ -210,6 +210,7 @@ async fn test_opponent_gets_character_selection_message() {
 
     let session = MatchingSession {
         matching_id,
+        creator_username: None,
         player_a: Player::new(player_a_id.clone()),
         player_b: Some(Player::new(player_b_id.clone())),
         status: MatchingStatus::Waiting,

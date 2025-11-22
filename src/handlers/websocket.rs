@@ -87,13 +87,20 @@ impl WsSession {
     }
 
     /// マッチング作成処理
-    fn handle_create_matching(&mut self, _ctx: &mut ws::WebsocketContext<Self>) {
+    fn handle_create_matching(
+        &mut self,
+        username: Option<String>,
+        _ctx: &mut ws::WebsocketContext<Self>,
+    ) {
         let Some(player_id) = &self.player_id else {
             println!("❌ handle_create_matching: player_id is None");
             return;
         };
 
-        println!("🎯 handle_create_matching: player_id={}", player_id);
+        println!(
+            "🎯 handle_create_matching: player_id={}, username={:?}",
+            player_id, username
+        );
 
         let player_id_clone = player_id.clone();
         let sessions = self.sessions.clone();
@@ -101,7 +108,10 @@ impl WsSession {
         let tx = self.tx.clone();
 
         // マッチングセッションを作成
-        let session = crate::models::MatchingSession::new(player_id_clone.clone());
+        let session = crate::models::MatchingSession::new_with_username(
+            player_id_clone.clone(),
+            username.clone(),
+        );
         let matching_id = session.matching_id;
         self.matching_id = Some(matching_id);
 
@@ -114,12 +124,23 @@ impl WsSession {
         let mut waiting_players_lock = waiting_players.lock().unwrap();
         waiting_players_lock.insert(player_id_clone.clone(), (matching_id, tx.clone()));
 
-        // 自分以外のマッチング一覧を取得
-        let current_matchings: Vec<uuid::Uuid> = waiting_players_lock
+        // 自分以外のマッチング一覧を取得（詳細情報付き）
+        let sessions_lock = sessions.lock().unwrap();
+        let current_matchings: Vec<crate::models::MatchingInfo> = waiting_players_lock
             .iter()
             .filter(|(pid, _)| *pid != &player_id_clone)
-            .map(|(_, (mid, _))| *mid)
+            .filter_map(|(_, (mid, _))| {
+                sessions_lock
+                    .get(mid)
+                    .map(|session| crate::models::MatchingInfo {
+                        matching_id: *mid,
+                        creator_username: session.creator_username.clone(),
+                        created_at: session.created_at,
+                        status: session.status.clone(),
+                    })
+            })
             .collect();
+        drop(sessions_lock);
         drop(waiting_players_lock);
 
         // MatchingCreatedを送信
@@ -131,14 +152,16 @@ impl WsSession {
         let _ = tx.send(msg);
 
         println!(
-            "✅ Matching created: matching_id={}, current_matchings={:?}",
-            matching_id, current_matchings
+            "✅ Matching created: matching_id={}, current_matchings count={}",
+            matching_id,
+            current_matchings.len()
         );
     }
 
     /// UpdateMatchingsをブロードキャスト
     fn broadcast_update_matchings(&self) {
         let waiting_players = self.waiting_players.lock().unwrap();
+        let sessions = self.sessions.lock().unwrap();
 
         println!(
             "📢 Broadcasting UpdateMatchings to {} players",
@@ -146,11 +169,20 @@ impl WsSession {
         );
 
         for (player_id, (_, sender)) in waiting_players.iter() {
-            // 自分以外のマッチング一覧
-            let filtered_matchings: Vec<Uuid> = waiting_players
+            // 自分以外のマッチング一覧（詳細情報付き）
+            let filtered_matchings: Vec<crate::models::MatchingInfo> = waiting_players
                 .iter()
                 .filter(|(pid, _)| *pid != player_id)
-                .map(|(_, (mid, _))| *mid)
+                .filter_map(|(_, (mid, _))| {
+                    sessions
+                        .get(mid)
+                        .map(|session| crate::models::MatchingInfo {
+                            matching_id: *mid,
+                            creator_username: session.creator_username.clone(),
+                            created_at: session.created_at,
+                            status: session.status.clone(),
+                        })
+                })
                 .collect();
 
             let msg = WsMessage::UpdateMatchings {
@@ -661,9 +693,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 println!("📨 Received WebSocket message: {}", text);
                 if let Ok(ws_msg) = serde_json::from_str::<WsMessage>(&text) {
                     match ws_msg {
-                        WsMessage::CreateMatching => {
-                            println!("✅ Handling CreateMatching");
-                            self.handle_create_matching(ctx);
+                        WsMessage::CreateMatching { username } => {
+                            println!("✅ Handling CreateMatching with username={:?}", username);
+                            self.handle_create_matching(username, ctx);
                         }
                         WsMessage::JoinMatch { matching_id } => {
                             println!("✅ Handling JoinMatch: matching_id={}", matching_id);
