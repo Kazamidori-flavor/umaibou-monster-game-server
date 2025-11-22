@@ -1,5 +1,5 @@
-use crate::db::models::Model3D;
-use crate::models::UploadModelResponse;
+use crate::db::models::Monster;
+use crate::models::{MonsterInfo, UploadModelResponse};
 use actix_multipart::Multipart;
 use actix_web::{HttpResponse, Responder, web};
 use futures_util::TryStreamExt;
@@ -20,32 +20,62 @@ pub async fn upload_model(mut payload: Multipart, pool: web::Data<SqlitePool>) -
     let mut file_data = Vec::new();
     let mut file_name = String::new();
     let mut content_type = String::new();
+    let mut monster_info: Option<MonsterInfo> = None;
 
     // Multipartフィールドを処理
     while let Ok(Some(mut field)) = payload.try_next().await {
-        // ファイル名とContent-Typeを取得
-        let content_disposition = field.content_disposition();
-        if let Some(filename) = content_disposition.get_filename() {
-            file_name = sanitize_filename(filename);
-            println!("📄 file_name: {}", file_name);
-        }
+        let field_name = field.name().to_string();
 
-        content_type = field
-            .content_type()
-            .map(|ct| ct.to_string())
-            .unwrap_or_default();
-        println!("📋 content_type: {}", content_type);
+        match field_name.as_str() {
+            "file" => {
+                // ファイル名とContent-Typeを取得
+                let content_disposition = field.content_disposition();
+                if let Some(filename) = content_disposition.get_filename() {
+                    file_name = sanitize_filename(filename);
+                    println!("📄 file_name: {}", file_name);
+                }
 
-        // ファイルデータを読み込み
-        while let Ok(Some(chunk)) = field.try_next().await {
-            file_data.extend_from_slice(&chunk);
+                content_type = field
+                    .content_type()
+                    .map(|ct| ct.to_string())
+                    .unwrap_or_default();
+                println!("📋 content_type: {}", content_type);
 
-            // ファイルサイズチェック
-            if file_data.len() > MAX_FILE_SIZE {
-                println!("❌ File size exceeds limit: {} bytes", file_data.len());
-                return HttpResponse::PayloadTooLarge().json(serde_json::json!({
-                    "error": format!("File size exceeds {} MB limit", MAX_FILE_SIZE / 1024 / 1024)
-                }));
+                // ファイルデータを読み込み
+                while let Ok(Some(chunk)) = field.try_next().await {
+                    file_data.extend_from_slice(&chunk);
+
+                    // ファイルサイズチェック
+                    if file_data.len() > MAX_FILE_SIZE {
+                        println!("❌ File size exceeds limit: {} bytes", file_data.len());
+                        return HttpResponse::PayloadTooLarge().json(serde_json::json!({
+                            "error": format!("File size exceeds {} MB limit", MAX_FILE_SIZE / 1024 / 1024)
+                        }));
+                    }
+                }
+            }
+            "monster_data" => {
+                // モンスター情報のJSONを読み込み
+                let mut json_data = Vec::new();
+                while let Ok(Some(chunk)) = field.try_next().await {
+                    json_data.extend_from_slice(&chunk);
+                }
+
+                match serde_json::from_slice::<MonsterInfo>(&json_data) {
+                    Ok(info) => {
+                        println!("📊 monster_info: {:?}", info);
+                        monster_info = Some(info);
+                    }
+                    Err(e) => {
+                        println!("❌ Failed to parse monster_data: {}", e);
+                        return HttpResponse::BadRequest().json(serde_json::json!({
+                            "error": format!("Invalid monster_data JSON: {}", e)
+                        }));
+                    }
+                }
+            }
+            _ => {
+                println!("⚠️ Unknown field: {}", field_name);
             }
         }
     }
@@ -57,6 +87,17 @@ pub async fn upload_model(mut payload: Multipart, pool: web::Data<SqlitePool>) -
             "error": "No file provided"
         }));
     }
+
+    // モンスター情報チェック
+    let monster_info = match monster_info {
+        Some(info) => info,
+        None => {
+            println!("❌ No monster_data provided");
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "error": "No monster_data provided"
+            }));
+        }
+    };
 
     // MIMEタイプチェック（ファイル拡張子でも判定）
     let is_valid_mime = ALLOWED_MIME_TYPES.contains(&content_type.as_str());
@@ -116,17 +157,26 @@ pub async fn upload_model(mut payload: Multipart, pool: web::Data<SqlitePool>) -
     }
 
     // データベースに記録
-    let model = Model3D::new(
+    let monster = Monster::new(
         model_id.clone(),
+        monster_info.name.clone(),
+        monster_info.max_hp,
+        monster_info.short_range_attack_power,
+        monster_info.long_range_attack_power,
+        monster_info.defense_power,
+        monster_info.move_speed,
+        monster_info.attack_range,
+        monster_info.attack_cooldown,
+        monster_info.size_type,
         file_name.clone(),
         file_path.clone(),
         file_data.len() as i64,
         content_type,
     );
 
-    match model.insert(&pool).await {
+    match monster.insert(&pool).await {
         Ok(_) => {
-            println!("✅ Model saved to database: {}", model_id);
+            println!("✅ Monster saved to database: {}", model_id);
 
             HttpResponse::Ok().json(UploadModelResponse {
                 model_id,
@@ -140,25 +190,25 @@ pub async fn upload_model(mut payload: Multipart, pool: web::Data<SqlitePool>) -
             let _ = tokio::fs::remove_file(&file_path).await;
 
             HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to save model metadata"
+                "error": "Failed to save monster metadata"
             }))
         }
     }
 }
 
-/// GET /api/models - 未使用の3Dモデル一覧取得
+/// GET /api/models - 未使用のモンスター一覧取得
 pub async fn list_models(pool: web::Data<SqlitePool>) -> impl Responder {
     println!("📥 GET /api/models");
 
-    match Model3D::list_unused(&pool).await {
-        Ok(models) => {
-            println!("✅ Found {} unused models", models.len());
-            HttpResponse::Ok().json(models)
+    match Monster::list_unused(&pool).await {
+        Ok(monsters) => {
+            println!("✅ Found {} unused monsters", monsters.len());
+            HttpResponse::Ok().json(monsters)
         }
         Err(e) => {
             println!("❌ Database error: {}", e);
             HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "Failed to fetch models"
+                "error": "Failed to fetch monsters"
             }))
         }
     }

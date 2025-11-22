@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "DELETE FROM models WHERE id = ?",
+  "query": "DELETE FROM monsters WHERE id = ?",
   "describe": {
     "columns": [],
     "parameters": {
@@ -8,5 +8,5 @@
     },
     "nullable": []
   },
-  "hash": "ad6b34c9d1983fdc5cdf52294b4855289ba9e5212e0a973f71d3bbc4a673ccb9"
+  "hash": "ba39fc302f3a7f5f9a0620532906238f1b06ee07c3eda5145ae6a4aa4b129e78"
 }

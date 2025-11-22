@@ -2,6 +2,33 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+// モンスターサイズ種別
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SizeType {
+    Small,
+    Medium,
+    Large,
+}
+
+impl SizeType {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Small" => Some(SizeType::Small),
+            "Medium" => Some(SizeType::Medium),
+            "Large" => Some(SizeType::Large),
+            _ => None,
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            SizeType::Small => "Small".to_string(),
+            SizeType::Medium => "Medium".to_string(),
+            SizeType::Large => "Large".to_string(),
+        }
+    }
+}
+
 // 3Dベクトル（位置・方向）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vector3 {
@@ -273,6 +300,19 @@ pub enum WsMessage {
 }
 
 // 3Dモデルアップロード関連
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MonsterInfo {
+    pub name: String,
+    pub max_hp: i64,
+    pub short_range_attack_power: i64,
+    pub long_range_attack_power: i64,
+    pub defense_power: i64,
+    pub move_speed: i64,
+    pub attack_range: i64,
+    pub attack_cooldown: i64,
+    pub size_type: String, // "Small", "Medium", "Large"
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UploadModelResponse {
     pub model_id: String,

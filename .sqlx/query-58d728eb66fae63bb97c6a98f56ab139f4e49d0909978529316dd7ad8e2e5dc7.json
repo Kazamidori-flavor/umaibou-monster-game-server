@@ -1,0 +1,110 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                id as \"id!\",\n                name as \"name!\",\n                max_hp as \"max_hp!\",\n                short_range_attack_power as \"short_range_attack_power!\",\n                long_range_attack_power as \"long_range_attack_power!\",\n                defense_power as \"defense_power!\",\n                move_speed as \"move_speed!\",\n                attack_range as \"attack_range!\",\n                attack_cooldown as \"attack_cooldown!\",\n                size_type as \"size_type!\",\n                file_name as \"file_name!\",\n                file_path as \"file_path!\",\n                file_size as \"file_size!\",\n                mime_type as \"mime_type!\",\n                uploaded_at as \"uploaded_at!\",\n                is_used as \"is_used!\"\n            FROM monsters\n            WHERE is_used = FALSE\n            ORDER BY uploaded_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name!",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "max_hp!",
+        "ordinal": 2,
+        "type_info": "Int64"
+      },
+      {
+        "name": "short_range_attack_power!",
+        "ordinal": 3,
+        "type_info": "Int64"
+      },
+      {
+        "name": "long_range_attack_power!",
+        "ordinal": 4,
+        "type_info": "Int64"
+      },
+      {
+        "name": "defense_power!",
+        "ordinal": 5,
+        "type_info": "Int64"
+      },
+      {
+        "name": "move_speed!",
+        "ordinal": 6,
+        "type_info": "Int64"
+      },
+      {
+        "name": "attack_range!",
+        "ordinal": 7,
+        "type_info": "Int64"
+      },
+      {
+        "name": "attack_cooldown!",
+        "ordinal": 8,
+        "type_info": "Int64"
+      },
+      {
+        "name": "size_type!",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "file_name!",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "file_path!",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "file_size!",
+        "ordinal": 12,
+        "type_info": "Int64"
+      },
+      {
+        "name": "mime_type!",
+        "ordinal": 13,
+        "type_info": "Text"
+      },
+      {
+        "name": "uploaded_at!",
+        "ordinal": 14,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_used!",
+        "ordinal": 15,
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "58d728eb66fae63bb97c6a98f56ab139f4e49d0909978529316dd7ad8e2e5dc7"
+}
