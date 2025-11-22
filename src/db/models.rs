@@ -11,6 +11,7 @@ pub struct Model3D {
     pub file_size: i64,
     pub mime_type: String,
     pub uploaded_at: String,
+    pub is_used: bool,
 }
 
 impl Model3D {
@@ -29,6 +30,7 @@ impl Model3D {
             file_size,
             mime_type,
             uploaded_at: Utc::now().to_rfc3339(),
+            is_used: false,
         }
     }
 
@@ -36,15 +38,16 @@ impl Model3D {
     pub async fn insert(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
-            INSERT INTO models (id, file_name, file_path, file_size, mime_type, uploaded_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO models (id, file_name, file_path, file_size, mime_type, uploaded_at, is_used)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
             self.id,
             self.file_name,
             self.file_path,
             self.file_size,
             self.mime_type,
-            self.uploaded_at
+            self.uploaded_at,
+            self.is_used
         )
         .execute(pool)
         .await?;
@@ -63,7 +66,8 @@ impl Model3D {
                 file_path as "file_path!",
                 file_size as "file_size!",
                 mime_type as "mime_type!",
-                uploaded_at as "uploaded_at!"
+                uploaded_at as "uploaded_at!",
+                is_used as "is_used!"
             FROM models WHERE id = ?
             "#,
             id
@@ -81,5 +85,38 @@ impl Model3D {
             .await?;
 
         Ok(result.rows_affected() > 0)
+    }
+
+    /// モデルを使用済みにマーク
+    pub async fn mark_as_used(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query!("UPDATE models SET is_used = TRUE WHERE id = ?", id)
+            .execute(pool)
+            .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// 未使用のモデル一覧を取得
+    pub async fn list_unused(pool: &SqlitePool) -> Result<Vec<Model3D>, sqlx::Error> {
+        let models = sqlx::query_as!(
+            Model3D,
+            r#"
+            SELECT
+                id as "id!",
+                file_name as "file_name!",
+                file_path as "file_path!",
+                file_size as "file_size!",
+                mime_type as "mime_type!",
+                uploaded_at as "uploaded_at!",
+                is_used as "is_used!"
+            FROM models
+            WHERE is_used = FALSE
+            ORDER BY uploaded_at DESC
+            "#
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(models)
     }
 }

@@ -1,10 +1,10 @@
 use crate::db::models::Model3D;
 use crate::game::manager::{GameManager, ProcessInput, StartGame};
 use crate::game::state::GameStateManager;
-use crate::handlers::{MatchingSessions, WsChannels, WaitingPlayers};
+use crate::handlers::{MatchingSessions, WaitingPlayers, WsChannels};
 use crate::models::{Character, MatchingStatus, WsMessage};
 use actix::prelude::*;
-use actix_web::{web, Error, HttpRequest, HttpResponse};
+use actix_web::{Error, HttpRequest, HttpResponse, web};
 use actix_web_actors::ws;
 use sqlx::SqlitePool;
 use std::time::{Duration, Instant};
@@ -74,7 +74,10 @@ impl WsSession {
         ctx.run_interval(Duration::from_millis(10), |act, ctx| {
             if let Some(rx) = &mut act.rx {
                 while let Ok(msg) = rx.try_recv() {
-                    println!("📤 Sending message to client (player_id={:?}): {:?}", act.player_id, msg);
+                    println!(
+                        "📤 Sending message to client (player_id={:?}): {:?}",
+                        act.player_id, msg
+                    );
                     if let Ok(json) = serde_json::to_string(&msg) {
                         ctx.text(json);
                     }
@@ -83,7 +86,6 @@ impl WsSession {
         });
     }
 
-
     /// マッチング作成処理
     fn handle_create_matching(&mut self, model_id: String, ctx: &mut ws::WebsocketContext<Self>) {
         let Some(player_id) = &self.player_id else {
@@ -91,7 +93,10 @@ impl WsSession {
             return;
         };
 
-        println!("🎯 handle_create_matching: player_id={}, model_id={}", player_id, model_id);
+        println!(
+            "🎯 handle_create_matching: player_id={}, model_id={}",
+            player_id, model_id
+        );
 
         // モデルIDの検証（非同期）
         let db_pool = self.db_pool.clone();
@@ -101,68 +106,111 @@ impl WsSession {
         let waiting_players = self.waiting_players.clone();
         let tx = self.tx.clone();
 
-        ctx.spawn(async move {
-            match crate::db::models::Model3D::find_by_id(&db_pool, &model_id_clone).await {
-                Ok(Some(_)) => {
-                    println!("✅ Model ID validated: {}", model_id_clone);
+        ctx.spawn(
+            async move {
+                match crate::db::models::Model3D::find_by_id(&db_pool, &model_id_clone).await {
+                    Ok(Some(model)) => {
+                        if model.is_used {
+                            println!("❌ Model ID already used: {}", model_id_clone);
+                            let error_msg = crate::models::WsMessage::Error {
+                                message: format!(
+                                    "Model ID '{}' has already been used.",
+                                    model_id_clone
+                                ),
+                            };
+                            let _ = tx.send(error_msg);
+                            return;
+                        }
 
-                    // マッチングセッションを作成
-                    let session = crate::models::MatchingSession::new_with_model(player_id_clone.clone(), model_id_clone.clone());
-                    let matching_id = session.matching_id;
+                        // モデルを使用済みにマーク
+                        if let Err(e) =
+                            crate::db::models::Model3D::mark_as_used(&db_pool, &model_id_clone)
+                                .await
+                        {
+                            println!("❌ Failed to mark model as used: {}", e);
+                            let error_msg = crate::models::WsMessage::Error {
+                                message: "Failed to process model selection".to_string(),
+                            };
+                            let _ = tx.send(error_msg);
+                            return;
+                        }
 
-                    // セッションに保存
-                    let mut sessions_lock = sessions.lock().unwrap();
-                    sessions_lock.insert(matching_id, session);
-                    drop(sessions_lock);
+                        println!(
+                            "✅ Model ID validated and marked as used: {}",
+                            model_id_clone
+                        );
 
-                    // マッチング待ちリストに追加
-                    let mut waiting_players_lock = waiting_players.lock().unwrap();
-                    waiting_players_lock.insert(player_id_clone.clone(), (matching_id, tx.clone()));
+                        // マッチングセッションを作成
+                        let session = crate::models::MatchingSession::new_with_model(
+                            player_id_clone.clone(),
+                            model_id_clone.clone(),
+                        );
+                        let matching_id = session.matching_id;
 
-                    // 自分以外のマッチング一覧を取得
-                    let current_matchings: Vec<uuid::Uuid> = waiting_players_lock
-                        .iter()
-                        .filter(|(pid, _)| *pid != &player_id_clone)
-                        .map(|(_, (mid, _))| *mid)
-                        .collect();
-                    drop(waiting_players_lock);
+                        // セッションに保存
+                        let mut sessions_lock = sessions.lock().unwrap();
+                        sessions_lock.insert(matching_id, session);
+                        drop(sessions_lock);
 
-                    // MatchingCreatedを送信
-                    let msg = crate::models::WsMessage::MatchingCreated {
-                        matching_id,
-                        current_matchings: current_matchings.clone(),
-                        timestamp: chrono::Utc::now(),
-                    };
-                    let _ = tx.send(msg);
+                        // マッチング待ちリストに追加
+                        let mut waiting_players_lock = waiting_players.lock().unwrap();
+                        waiting_players_lock
+                            .insert(player_id_clone.clone(), (matching_id, tx.clone()));
 
-                    println!("✅ Matching created: matching_id={}, current_matchings={:?}", matching_id, current_matchings);
-                }
-                Ok(None) => {
-                    println!("❌ Model ID not found: {}", model_id_clone);
-                    let error_msg = crate::models::WsMessage::Error {
-                        message: format!("Model ID '{}' not found. Please upload a 3D model first.", model_id_clone),
-                    };
-                    let _ = tx.send(error_msg);
-                    return;
-                }
-                Err(e) => {
-                    println!("❌ Database error while validating model ID: {}", e);
-                    let error_msg = crate::models::WsMessage::Error {
-                        message: "Failed to validate model ID".to_string(),
-                    };
-                    let _ = tx.send(error_msg);
-                    return;
+                        // 自分以外のマッチング一覧を取得
+                        let current_matchings: Vec<uuid::Uuid> = waiting_players_lock
+                            .iter()
+                            .filter(|(pid, _)| *pid != &player_id_clone)
+                            .map(|(_, (mid, _))| *mid)
+                            .collect();
+                        drop(waiting_players_lock);
+
+                        // MatchingCreatedを送信
+                        let msg = crate::models::WsMessage::MatchingCreated {
+                            matching_id,
+                            current_matchings: current_matchings.clone(),
+                            timestamp: chrono::Utc::now(),
+                        };
+                        let _ = tx.send(msg);
+
+                        println!(
+                            "✅ Matching created: matching_id={}, current_matchings={:?}",
+                            matching_id, current_matchings
+                        );
+                    }
+                    Ok(None) => {
+                        println!("❌ Model ID not found: {}", model_id_clone);
+                        let error_msg = crate::models::WsMessage::Error {
+                            message: format!(
+                                "Model ID '{}' not found. Please upload a 3D model first.",
+                                model_id_clone
+                            ),
+                        };
+                        let _ = tx.send(error_msg);
+                        return;
+                    }
+                    Err(e) => {
+                        println!("❌ Database error while validating model ID: {}", e);
+                        let error_msg = crate::models::WsMessage::Error {
+                            message: "Failed to validate model ID".to_string(),
+                        };
+                        let _ = tx.send(error_msg);
+                        return;
+                    }
                 }
             }
-        }.into_actor(self));
+            .into_actor(self),
+        );
     }
-
 
     /// UpdateMatchingsをブロードキャスト
     fn broadcast_update_matchings(&self) {
         let waiting_players = self.waiting_players.lock().unwrap();
 
-        println!("📢 Broadcasting UpdateMatchings to {} players", waiting_players.len());
+        println!(
+            "📢 Broadcasting UpdateMatchings to {} players",
+            waiting_players.len()
+        );
 
         for (player_id, (_, sender)) in waiting_players.iter() {
             // 自分以外のマッチング一覧
@@ -181,13 +229,21 @@ impl WsSession {
     }
 
     /// マッチング参加処理
-    fn handle_join_match(&mut self, matching_id: Uuid, model_id: String, ctx: &mut ws::WebsocketContext<Self>) {
+    fn handle_join_match(
+        &mut self,
+        matching_id: Uuid,
+        model_id: String,
+        ctx: &mut ws::WebsocketContext<Self>,
+    ) {
         let Some(player_id) = &self.player_id else {
             println!("❌ handle_join_match: player_id is None");
             return;
         };
 
-        println!("🎯 handle_join_match: player_id={}, matching_id={}, model_id={}", player_id, matching_id, model_id);
+        println!(
+            "🎯 handle_join_match: player_id={}, matching_id={}, model_id={}",
+            player_id, matching_id, model_id
+        );
 
         // モデルIDの検証と参加処理（非同期）
         let db_pool = self.db_pool.clone();
@@ -198,121 +254,168 @@ impl WsSession {
         let ws_channels = self.ws_channels.clone();
         let tx = self.tx.clone();
 
-        ctx.spawn(async move {
-            // モデルIDの検証
-            let player_b_model = match crate::db::models::Model3D::find_by_id(&db_pool, &model_id_clone).await {
-                Ok(Some(model)) => model,
-                Ok(None) => {
-                    println!("❌ Model ID not found: {}", model_id_clone);
-                    let error_msg = crate::models::WsMessage::Error {
-                        message: format!("Model ID '{}' not found. Please upload a 3D model first.", model_id_clone),
-                    };
-                    let _ = tx.send(error_msg);
-                    return;
-                }
-                Err(e) => {
-                    println!("❌ Database error while validating model ID: {}", e);
-                    let error_msg = crate::models::WsMessage::Error {
-                        message: "Failed to validate model ID".to_string(),
-                    };
-                    let _ = tx.send(error_msg);
-                    return;
-                }
-            };
+        ctx.spawn(
+            async move {
+                // モデルIDの検証
+                let player_b_model =
+                    match crate::db::models::Model3D::find_by_id(&db_pool, &model_id_clone).await {
+                        Ok(Some(model)) => {
+                            if model.is_used {
+                                println!("❌ Model ID already used: {}", model_id_clone);
+                                let error_msg = crate::models::WsMessage::Error {
+                                    message: format!(
+                                        "Model ID '{}' has already been used.",
+                                        model_id_clone
+                                    ),
+                                };
+                                let _ = tx.send(error_msg);
+                                return;
+                            }
 
-            let mut sessions_lock = sessions.lock().unwrap();
-            let session = match sessions_lock.get_mut(&matching_id) {
-                Some(s) => s,
-                None => {
-                    println!("❌ Matching session not found: matching_id={}", matching_id);
-                    let error_msg = crate::models::WsMessage::Error {
-                        message: "Matching session not found".to_string(),
-                    };
-                    let _ = tx.send(error_msg);
-                    return;
-                }
-            };
+                            // モデルを使用済みにマーク
+                            if let Err(e) =
+                                crate::db::models::Model3D::mark_as_used(&db_pool, &model_id_clone)
+                                    .await
+                            {
+                                println!("❌ Failed to mark model as used: {}", e);
+                                let error_msg = crate::models::WsMessage::Error {
+                                    message: "Failed to process model selection".to_string(),
+                                };
+                                let _ = tx.send(error_msg);
+                                return;
+                            }
 
-            // 既にマッチング済みチェック
-            if session.status != crate::models::MatchingStatus::Waiting {
-                println!("❌ Matching session is not available: status={:?}", session.status);
-                let error_msg = crate::models::WsMessage::Error {
-                    message: "This matching session is not available".to_string(),
+                            println!(
+                                "✅ Model ID validated and marked as used: {}",
+                                model_id_clone
+                            );
+                            model
+                        }
+                        Ok(None) => {
+                            println!("❌ Model ID not found: {}", model_id_clone);
+                            let error_msg = crate::models::WsMessage::Error {
+                                message: format!(
+                                    "Model ID '{}' not found. Please upload a 3D model first.",
+                                    model_id_clone
+                                ),
+                            };
+                            let _ = tx.send(error_msg);
+                            return;
+                        }
+                        Err(e) => {
+                            println!("❌ Database error while validating model ID: {}", e);
+                            let error_msg = crate::models::WsMessage::Error {
+                                message: "Failed to validate model ID".to_string(),
+                            };
+                            let _ = tx.send(error_msg);
+                            return;
+                        }
+                    };
+
+                let mut sessions_lock = sessions.lock().unwrap();
+                let session = match sessions_lock.get_mut(&matching_id) {
+                    Some(s) => s,
+                    None => {
+                        println!("❌ Matching session not found: matching_id={}", matching_id);
+                        let error_msg = crate::models::WsMessage::Error {
+                            message: "Matching session not found".to_string(),
+                        };
+                        let _ = tx.send(error_msg);
+                        return;
+                    }
                 };
-                let _ = tx.send(error_msg);
-                return;
-            }
 
-            // 同じプレイヤーIDチェック
-            if session.player_a.id == player_id_clone {
-                println!("❌ Cannot join your own matching session");
-                let error_msg = crate::models::WsMessage::Error {
-                    message: "Cannot join your own matching session".to_string(),
+                // 既にマッチング済みチェック
+                if session.status != crate::models::MatchingStatus::Waiting {
+                    println!(
+                        "❌ Matching session is not available: status={:?}",
+                        session.status
+                    );
+                    let error_msg = crate::models::WsMessage::Error {
+                        message: "This matching session is not available".to_string(),
+                    };
+                    let _ = tx.send(error_msg);
+                    return;
+                }
+
+                // 同じプレイヤーIDチェック
+                if session.player_a.id == player_id_clone {
+                    println!("❌ Cannot join your own matching session");
+                    let error_msg = crate::models::WsMessage::Error {
+                        message: "Cannot join your own matching session".to_string(),
+                    };
+                    let _ = tx.send(error_msg);
+                    return;
+                }
+
+                // プレイヤーAのモデルIDを取得
+                let player_a_model_id = session.player_a.selected_model_id.clone();
+
+                // プレイヤーAのモデルデータを取得
+                let player_a_model = if let Some(model_id) = &player_a_model_id {
+                    match crate::db::models::Model3D::find_by_id(&db_pool, model_id).await {
+                        Ok(Some(model)) => Some(model),
+                        _ => None,
+                    }
+                } else {
+                    None
                 };
-                let _ = tx.send(error_msg);
-                return;
-            }
 
-            // プレイヤーAのモデルIDを取得
-            let player_a_model_id = session.player_a.selected_model_id.clone();
+                // プレイヤーBを設定してマッチング成立
+                let player_a_id = session.player_a.id.clone();
+                session.player_b = Some(crate::models::Player::new_with_model(
+                    player_id_clone.clone(),
+                    model_id_clone.clone(),
+                ));
+                session.status = crate::models::MatchingStatus::Matched;
+                drop(sessions_lock);
 
-            // プレイヤーAのモデルデータを取得
-            let player_a_model = if let Some(model_id) = &player_a_model_id {
-                match crate::db::models::Model3D::find_by_id(&db_pool, model_id).await {
-                    Ok(Some(model)) => Some(model),
-                    _ => None,
-                }
-            } else {
-                None
-            };
+                println!(
+                    "✅ Matching successful: player_a={}, player_b={}",
+                    player_a_id, player_id_clone
+                );
 
-            // プレイヤーBを設定してマッチング成立
-            let player_a_id = session.player_a.id.clone();
-            session.player_b = Some(crate::models::Player::new_with_model(player_id_clone.clone(), model_id_clone.clone()));
-            session.status = crate::models::MatchingStatus::Matched;
-            drop(sessions_lock);
+                // 待機リストから両者を削除
+                let mut waiting_players_lock = waiting_players.lock().unwrap();
+                let player_a_sender = waiting_players_lock.remove(&player_a_id);
+                waiting_players_lock.remove(&player_id_clone);
+                drop(waiting_players_lock);
 
-            println!("✅ Matching successful: player_a={}, player_b={}", player_a_id, player_id_clone);
+                // WsChannelsに両者を登録
+                let mut channels = ws_channels.lock().unwrap();
+                let player_map = channels.entry(matching_id).or_default();
+                player_map.insert(player_a_id.clone(), player_a_sender.unwrap().1);
+                player_map.insert(player_id_clone.clone(), tx.clone());
+                drop(channels);
 
-            // 待機リストから両者を削除
-            let mut waiting_players_lock = waiting_players.lock().unwrap();
-            let player_a_sender = waiting_players_lock.remove(&player_a_id);
-            waiting_players_lock.remove(&player_id_clone);
-            drop(waiting_players_lock);
+                // 両者にMatchingEstablishedを送信（相手のモデルデータ付き）
+                let channels = ws_channels.lock().unwrap();
+                if let Some(player_map) = channels.get(&matching_id) {
+                    // プレイヤーAに送信（プレイヤーBのモデルデータ）
+                    if let Some(sender_a) = player_map.get(&player_a_id) {
+                        let msg = crate::models::WsMessage::MatchingEstablished {
+                            matching_id,
+                            opponent_id: player_id_clone.clone(),
+                            opponent_model: Some(player_b_model.clone()),
+                            timestamp: chrono::Utc::now(),
+                        };
+                        let _ = sender_a.send(msg);
+                    }
 
-            // WsChannelsに両者を登録
-            let mut channels = ws_channels.lock().unwrap();
-            let player_map = channels.entry(matching_id).or_default();
-            player_map.insert(player_a_id.clone(), player_a_sender.unwrap().1);
-            player_map.insert(player_id_clone.clone(), tx.clone());
-            drop(channels);
-
-            // 両者にMatchingEstablishedを送信（相手のモデルデータ付き）
-            let channels = ws_channels.lock().unwrap();
-            if let Some(player_map) = channels.get(&matching_id) {
-                // プレイヤーAに送信（プレイヤーBのモデルデータ）
-                if let Some(sender_a) = player_map.get(&player_a_id) {
-                    let msg = crate::models::WsMessage::MatchingEstablished {
-                        matching_id,
-                        opponent_id: player_id_clone.clone(),
-                        opponent_model: Some(player_b_model.clone()),
-                        timestamp: chrono::Utc::now(),
-                    };
-                    let _ = sender_a.send(msg);
-                }
-
-                // プレイヤーBに送信（プレイヤーAのモデルデータ）
-                if let Some(sender_b) = player_map.get(&player_id_clone) {
-                    let msg = crate::models::WsMessage::MatchingEstablished {
-                        matching_id,
-                        opponent_id: player_a_id.clone(),
-                        opponent_model: player_a_model,
-                        timestamp: chrono::Utc::now(),
-                    };
-                    let _ = sender_b.send(msg);
+                    // プレイヤーBに送信（プレイヤーAのモデルデータ）
+                    if let Some(sender_b) = player_map.get(&player_id_clone) {
+                        let msg = crate::models::WsMessage::MatchingEstablished {
+                            matching_id,
+                            opponent_id: player_a_id.clone(),
+                            opponent_model: player_a_model,
+                            timestamp: chrono::Utc::now(),
+                        };
+                        let _ = sender_b.send(msg);
+                    }
                 }
             }
-        }.into_actor(self));
+            .into_actor(self),
+        );
     }
 
     /// 準備完了処理（キャラクター選択を含む）
@@ -326,36 +429,45 @@ impl WsSession {
             return;
         };
 
-        println!("🎯 handle_ready: player_id={}, matching_id={}, model_id={}", player_id, matching_id, model_id);
+        println!(
+            "🎯 handle_ready: player_id={}, matching_id={}, model_id={}",
+            player_id, matching_id, model_id
+        );
 
         // モデルIDの検証（非同期）
         let db_pool = self.db_pool.clone();
         let model_id_clone = model_id.clone();
         let tx = self.tx.clone();
 
-        ctx.spawn(async move {
-            match Model3D::find_by_id(&db_pool, &model_id_clone).await {
-                Ok(Some(_)) => {
-                    println!("✅ Model ID validated: {}", model_id_clone);
-                }
-                Ok(None) => {
-                    println!("❌ Model ID not found: {}", model_id_clone);
-                    let error_msg = WsMessage::Error {
-                        message: format!("Model ID '{}' not found. Please upload a 3D model first.", model_id_clone),
-                    };
-                    let _ = tx.send(error_msg);
-                    return;
-                }
-                Err(e) => {
-                    println!("❌ Database error while validating model ID: {}", e);
-                    let error_msg = WsMessage::Error {
-                        message: "Failed to validate model ID".to_string(),
-                    };
-                    let _ = tx.send(error_msg);
-                    return;
+        ctx.spawn(
+            async move {
+                match Model3D::find_by_id(&db_pool, &model_id_clone).await {
+                    Ok(Some(_)) => {
+                        println!("✅ Model ID validated: {}", model_id_clone);
+                    }
+                    Ok(None) => {
+                        println!("❌ Model ID not found: {}", model_id_clone);
+                        let error_msg = WsMessage::Error {
+                            message: format!(
+                                "Model ID '{}' not found. Please upload a 3D model first.",
+                                model_id_clone
+                            ),
+                        };
+                        let _ = tx.send(error_msg);
+                        return;
+                    }
+                    Err(e) => {
+                        println!("❌ Database error while validating model ID: {}", e);
+                        let error_msg = WsMessage::Error {
+                            message: "Failed to validate model ID".to_string(),
+                        };
+                        let _ = tx.send(error_msg);
+                        return;
+                    }
                 }
             }
-        }.into_actor(self));
+            .into_actor(self),
+        );
 
         let mut sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get_mut(matching_id) {
@@ -391,14 +503,26 @@ impl WsSession {
                     timestamp: chrono::Utc::now(),
                 };
                 let channels = self.ws_channels.lock().unwrap();
-                println!("📋 WsChannels for matching_id {}: {:?}", matching_id, channels.get(matching_id).map(|m| m.keys().collect::<Vec<_>>()));
+                println!(
+                    "📋 WsChannels for matching_id {}: {:?}",
+                    matching_id,
+                    channels
+                        .get(matching_id)
+                        .map(|m| m.keys().collect::<Vec<_>>())
+                );
 
                 if let Some(player_map) = channels.get(matching_id) {
                     if let Some(opponent_sender) = player_map.get(&opponent_id) {
-                        println!("✅ Sending OpponentCharacterSelected to opponent: {}", opponent_id);
+                        println!(
+                            "✅ Sending OpponentCharacterSelected to opponent: {}",
+                            opponent_id
+                        );
                         let _ = opponent_sender.send(msg);
                     } else {
-                        println!("❌ opponent_sender not found for opponent_id: {}", opponent_id);
+                        println!(
+                            "❌ opponent_sender not found for opponent_id: {}",
+                            opponent_id
+                        );
                     }
                 } else {
                     println!("❌ player_map not found for matching_id: {}", matching_id);
@@ -407,7 +531,8 @@ impl WsSession {
                 println!("❌ opponent_id is None, cannot send message");
             }
 
-            println!("📊 Ready status: player_a={}, player_b={}",
+            println!(
+                "📊 Ready status: player_a={}, player_b={}",
                 session.player_a.ready,
                 session.player_b.as_ref().map_or(false, |p| p.ready)
             );
@@ -429,17 +554,18 @@ impl WsSession {
                     }
                 };
 
-                let player_b_char = match session.player_b.as_ref().and_then(|p| p.character.clone()) {
-                    Some(c) => c,
-                    None => {
-                        println!("❌ player_b has not selected a character yet");
-                        let error_msg = WsMessage::Error {
-                            message: "Player B has not selected a character".to_string(),
-                        };
-                        let _ = self.tx.send(error_msg);
-                        return;
-                    }
-                };
+                let player_b_char =
+                    match session.player_b.as_ref().and_then(|p| p.character.clone()) {
+                        Some(c) => c,
+                        None => {
+                            println!("❌ player_b has not selected a character yet");
+                            let error_msg = WsMessage::Error {
+                                message: "Player B has not selected a character".to_string(),
+                            };
+                            let _ = self.tx.send(error_msg);
+                            return;
+                        }
+                    };
 
                 println!("✅ Both players have selected characters");
                 session.status = MatchingStatus::InGame;
@@ -454,23 +580,21 @@ impl WsSession {
 
                 // ゲームマネージャーに開始を通知
                 let channels = self.ws_channels.lock().unwrap();
-                let ws_senders = channels
-                    .get(matching_id)
-                    .cloned()
-                    .unwrap_or_default();
+                let ws_senders = channels.get(matching_id).cloned().unwrap_or_default();
 
-                self.game_manager.do_send(StartGame {
-                    game,
-                    ws_senders,
-                });
+                self.game_manager.do_send(StartGame { game, ws_senders });
             }
         }
     }
 
     /// 入力処理
     fn handle_input(&mut self, action: crate::models::InputAction) {
-        let Some(player_id) = &self.player_id else { return };
-        let Some(matching_id) = &self.matching_id else { return };
+        let Some(player_id) = &self.player_id else {
+            return;
+        };
+        let Some(matching_id) = &self.matching_id else {
+            return;
+        };
 
         let input = crate::models::PlayerInput {
             player_id: player_id.clone(),
@@ -485,9 +609,17 @@ impl WsSession {
     }
 
     /// 状態更新処理
-    fn handle_state_update(&mut self, position: crate::models::Vector3, rotation: crate::models::Vector3) {
-        let Some(player_id) = &self.player_id else { return };
-        let Some(matching_id) = &self.matching_id else { return };
+    fn handle_state_update(
+        &mut self,
+        position: crate::models::Vector3,
+        rotation: crate::models::Vector3,
+    ) {
+        let Some(player_id) = &self.player_id else {
+            return;
+        };
+        let Some(matching_id) = &self.matching_id else {
+            return;
+        };
 
         use crate::game::manager::ProcessStateUpdate;
         self.game_manager.do_send(ProcessStateUpdate {
@@ -547,11 +679,20 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                 if let Ok(ws_msg) = serde_json::from_str::<WsMessage>(&text) {
                     match ws_msg {
                         WsMessage::CreateMatching { selected_model_id } => {
-                            println!("✅ Handling CreateMatching: selected_model_id={}", selected_model_id);
+                            println!(
+                                "✅ Handling CreateMatching: selected_model_id={}",
+                                selected_model_id
+                            );
                             self.handle_create_matching(selected_model_id, ctx);
                         }
-                        WsMessage::JoinMatch { matching_id, selected_model_id } => {
-                            println!("✅ Handling JoinMatch: matching_id={}, selected_model_id={}", matching_id, selected_model_id);
+                        WsMessage::JoinMatch {
+                            matching_id,
+                            selected_model_id,
+                        } => {
+                            println!(
+                                "✅ Handling JoinMatch: matching_id={}, selected_model_id={}",
+                                matching_id, selected_model_id
+                            );
                             self.handle_join_match(matching_id, selected_model_id, ctx);
                         }
                         WsMessage::Ready { selected_model_id } => {
@@ -563,7 +704,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                             self.handle_input(action);
                         }
                         WsMessage::StateUpdate { position, rotation } => {
-                            println!("🔄 Handling StateUpdate: position={:?}, rotation={:?}", position, rotation);
+                            println!(
+                                "🔄 Handling StateUpdate: position={:?}, rotation={:?}",
+                                position, rotation
+                            );
                             self.handle_state_update(position, rotation);
                         }
                         _ => {
@@ -641,14 +785,22 @@ pub async fn ws_handler(
                 let mut channels = ws_channels.lock().unwrap();
                 let player_map = channels.entry(id).or_default();
                 player_map.insert(player_id.clone(), ws_session.tx.clone());
-                println!("✅ WebSocket connected: player_id={}, matching_id={}", player_id, id);
-                println!("📋 Current WsChannels for matching_id {}: {:?}", id, player_map.keys().collect::<Vec<_>>());
+                println!(
+                    "✅ WebSocket connected: player_id={}, matching_id={}",
+                    player_id, id
+                );
+                println!(
+                    "📋 Current WsChannels for matching_id {}: {:?}",
+                    id,
+                    player_map.keys().collect::<Vec<_>>()
+                );
             }
 
             // マッチング成功を通知
             let sessions = ws_session.sessions.lock().unwrap();
             if let Some(session) = sessions.get(&id) {
-                let opponent_id = if session.player_a.id == *ws_session.player_id.as_ref().unwrap() {
+                let opponent_id = if session.player_a.id == *ws_session.player_id.as_ref().unwrap()
+                {
                     session.player_b.as_ref().map(|p| p.id.clone())
                 } else {
                     Some(session.player_a.id.clone())

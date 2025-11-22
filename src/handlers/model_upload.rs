@@ -1,23 +1,20 @@
 use crate::db::models::Model3D;
 use crate::models::UploadModelResponse;
 use actix_multipart::Multipart;
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, web};
 use futures_util::TryStreamExt;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
 const MAX_FILE_SIZE: usize = 50 * 1024 * 1024; // 50MB (GLBは大きくなる可能性)
 const ALLOWED_MIME_TYPES: &[&str] = &[
-    "model/gltf-binary",            // GLB (glTF Binary) - 標準MIMEタイプ
-    "application/octet-stream",     // 汎用バイナリ（.glbなど）
-    "model/gltf+json",              // glTF JSON形式
+    "model/gltf-binary",        // GLB (glTF Binary) - 標準MIMEタイプ
+    "application/octet-stream", // 汎用バイナリ（.glbなど）
+    "model/gltf+json",          // glTF JSON形式
 ];
 
 /// POST /api/models/upload - 3Dモデルアップロード
-pub async fn upload_model(
-    mut payload: Multipart,
-    pool: web::Data<SqlitePool>,
-) -> impl Responder {
+pub async fn upload_model(mut payload: Multipart, pool: web::Data<SqlitePool>) -> impl Responder {
     println!("📥 POST /api/models/upload");
 
     let mut file_data = Vec::new();
@@ -33,7 +30,10 @@ pub async fn upload_model(
             println!("📄 file_name: {}", file_name);
         }
 
-        content_type = field.content_type().map(|ct| ct.to_string()).unwrap_or_default();
+        content_type = field
+            .content_type()
+            .map(|ct| ct.to_string())
+            .unwrap_or_default();
         println!("📋 content_type: {}", content_type);
 
         // ファイルデータを読み込み
@@ -75,14 +75,20 @@ pub async fn upload_model(
     let is_valid_file = is_glb_file || is_gltf_file || is_valid_mime;
 
     if !is_valid_file {
-        println!("❌ Invalid file type: {} for file: {}", content_type, file_name);
+        println!(
+            "❌ Invalid file type: {} for file: {}",
+            content_type, file_name
+        );
         return HttpResponse::BadRequest().json(serde_json::json!({
             "error": format!("Invalid file type. Allowed: .glb/.gltf files or MIME types: {:?}", ALLOWED_MIME_TYPES)
         }));
     }
 
     if (is_glb_file || is_gltf_file) && !is_valid_mime {
-        println!("⚠️  MIME type '{}' not in allowed list, but file extension is valid", content_type);
+        println!(
+            "⚠️  MIME type '{}' not in allowed list, but file extension is valid",
+            content_type
+        );
     }
 
     // ファイル拡張子を取得
@@ -135,6 +141,24 @@ pub async fn upload_model(
 
             HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to save model metadata"
+            }))
+        }
+    }
+}
+
+/// GET /api/models - 未使用の3Dモデル一覧取得
+pub async fn list_models(pool: web::Data<SqlitePool>) -> impl Responder {
+    println!("📥 GET /api/models");
+
+    match Model3D::list_unused(&pool).await {
+        Ok(models) => {
+            println!("✅ Found {} unused models", models.len());
+            HttpResponse::Ok().json(models)
+        }
+        Err(e) => {
+            println!("❌ Database error: {}", e);
+            HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to fetch models"
             }))
         }
     }

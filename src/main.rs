@@ -1,15 +1,18 @@
 mod db;
-mod models;
-mod utils;
 mod game;
 mod handlers;
+mod models;
+mod utils;
 
 use actix::Actor;
-use actix_web::{web, App, HttpServer};
+use actix_files as fs;
+use actix_web::{App, HttpServer, web};
 use db::init_db;
 use game::manager::GameManager;
-use handlers::{create_matching, join_matching, upload_model, ws_handler, MatchingSessions, WsChannels, WaitingPlayers};
-use actix_files as fs;
+use handlers::{
+    MatchingSessions, WaitingPlayers, WsChannels, create_matching, join_matching, upload_model,
+    ws_handler,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -57,6 +60,7 @@ async fn main() -> std::io::Result<()> {
             .route("/api/matching/create", web::post().to(create_matching))
             .route("/api/matching/join", web::post().to(join_matching))
             .route("/api/models/upload", web::post().to(upload_model))
+            .route("/api/models", web::get().to(handlers::list_models))
             .route("/ws", web::get().to(ws_handler))
             // 静的ファイル配信（モデルファイルのダウンロード用）
             .service(fs::Files::new("/uploads", "./uploads").show_files_listing())
