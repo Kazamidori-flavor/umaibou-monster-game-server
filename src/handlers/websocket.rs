@@ -356,6 +356,7 @@ impl WsSession {
                     matching_id,
                     opponent_id: player_id_clone.clone(),
                     model_data: None,
+                    monster_stats: None, // Ready時に送信
                     timestamp: chrono::Utc::now(),
                 };
                 println!(
@@ -373,6 +374,7 @@ impl WsSession {
                     matching_id,
                     opponent_id: player_a_id.clone(),
                     model_data: None,
+                    monster_stats: None, // Ready時に送信
                     timestamp: chrono::Utc::now(),
                 };
                 println!(
@@ -472,10 +474,12 @@ impl WsSession {
 
                             println!("🎯 opponent_id: {:?}", opponent_id);
 
-                            // 相手に通知
+                            // 相手に通知（モンスターステータスを含む）
                             if let Some(opponent_id) = opponent_id {
+                                let monster_stats = crate::models::MonsterStats::from_monster(&model);
                                 let msg = WsMessage::OpponentCharacterSelected {
                                     character,
+                                    monster_stats: Some(monster_stats),
                                     timestamp: chrono::Utc::now(),
                                 };
                                 let channels = ws_channels.lock().unwrap();
@@ -483,7 +487,7 @@ impl WsSession {
                                     if let Some((opponent_sender, _)) = player_map.get(&opponent_id)
                                     {
                                         println!(
-                                            "✅ Sending OpponentCharacterSelected to opponent: {}",
+                                            "✅ Sending OpponentCharacterSelected with monster stats to opponent: {}",
                                             opponent_id
                                         );
                                         let _ = opponent_sender.send(msg);
