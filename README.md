@@ -33,18 +33,79 @@ WebSocketによる60Hzのゲーム状態配信とREST APIによるマッチン�
 
 ### ビルド & 起動
 
+## 🚀 デプロイメント
+
+### 概要
+
+- **トリガー**: `release`ブランチが`main`にマージされたとき
+- **デプロイ方法**: GitHub Actions + `tsh scp`
+- **デプロイ先**: `ct108` (Teleport経由)
+
+### 初期設定
+
+#### 1. Identity Fileの発行
+
+ローカルマシンで以下のコマンドを実行し、認証用ファイルを発行します。
+
 ```bash
-# リポジトリクローン（または既存プロジェクトに移動）
-cd umaibou-monster-game-server
+# Teleportにログイン
+tsh login --proxy=teleport.localhouse.jp:443 --user=your-username
 
-# ビルド
-cargo build
-
-# 起動
-cargo run
+# Identity Fileのエクスポート（有効期限に注意）
+tsh identity export teleport-auth.pem
 ```
 
-サーバーは `http://0.0.0.0:8080` で起動します。
+#### 2. GitHubシークレットの設定
+
+リポジトリの Settings > Secrets and variables > Actions で以下を追加：
+
+- **`TELEPORT_IDENTITY`**: 上記で作成した `teleport-auth.pem` の中身をすべてコピーして貼り付け
+- **`DEPLOY_USER`**: デプロイ先サーバーのユーザー名（例: `gohan`）
+
+### デプロイ方法
+
+#### 自動デプロイ（推奨）
+
+```bash
+# 機能開発
+git checkout -b feature/new-feature
+# ... 開発作業 ...
+git commit -m "feat: add new feature"
+
+# releaseブランチにマージ
+git checkout release
+git merge feature/new-feature
+
+# mainにマージ → デプロイ自動実行
+git checkout main
+git merge release
+git push origin main
+```
+
+#### 手動デプロイ
+
+GitHub Actionsの画面から **Run workflow** で手動実行可能。
+
+### デプロイの確認
+
+```bash
+# サーバーにSSH接続
+tsh ssh your-username@ct108
+
+# サービスの状態確認
+pgrep -f umaibou-monster-game-server
+
+# ログの確認
+tail -f ~/Projects/umaibou-monster-game-server/server.log
+```
+
+### ロールバック
+
+```bash
+# ローカルマシンから
+export DEPLOY_USER=your-username
+./scripts/rollback.sh
+```
 
 ## 📡 API仕様
 

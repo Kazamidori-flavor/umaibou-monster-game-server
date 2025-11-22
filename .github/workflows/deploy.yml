@@ -1,0 +1,102 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  RUST_VERSION: "1.70"
+  TELEPORT_VERSION: "14.3.0"
+  TELEPORT_PROXY: teleport.localhouse.jp:443
+  DEPLOY_SERVER: ct108
+  DEPLOY_PATH: Projects
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if merge from release branch
+        id: check
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "Commit message: $COMMIT_MSG"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "Manual deployment triggered"
+          elif echo "$COMMIT_MSG" | grep -qE "Merge.*release"; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "Release branch merged, will deploy"
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "Not a release merge, skipping deployment"
+          fi
+
+  deploy:
+    needs: check-release
+    if: needs.check-release.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Build release binary
+        run: |
+          cargo build --release --bin umaibou-monster-game-server
+          chmod +x target/release/umaibou-monster-game-server
+
+      - name: Install Teleport
+        run: |
+          curl -O https://cdn.teleport.dev/teleport-v${{ env.TELEPORT_VERSION }}-linux-amd64-bin.tar.gz
+          tar -xzf teleport-v${{ env.TELEPORT_VERSION }}-linux-amd64-bin.tar.gz
+          sudo mv teleport/tsh /usr/local/bin/
+          tsh version
+
+      - name: Authenticate with Teleport
+        run: |
+          # Identity FileをSecretsから復元
+          echo "${{ secrets.TELEPORT_IDENTITY }}" > auth.pem
+          chmod 600 auth.pem
+
+          # Identity Fileを使ってログイン
+          tsh login \
+            --proxy=${{ env.TELEPORT_PROXY }} \
+            --auth=local \
+            --identity=auth.pem
+
+          # 接続確認
+          tsh ls
+
+      - name: Deploy to server
+        run: |
+          chmod +x scripts/deploy.sh
+          scripts/deploy.sh
+        env:
+          DEPLOY_SERVER: ${{ env.DEPLOY_SERVER }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
+
+      - name: Verify deployment
+        run: |
+          tsh ssh ${{ secrets.DEPLOY_USER }}@${{ env.DEPLOY_SERVER }} "pgrep -f umaibou-monster-game-server && echo 'Service is running'"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f auth.pem
+          tsh logout || true
