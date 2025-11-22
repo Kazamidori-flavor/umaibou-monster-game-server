@@ -243,6 +243,12 @@ sequenceDiagram
 }
 ```
 
+#### 3.4 他の待機中プレイヤーへの通知
+
+`broadcast_update_matchings()`が自動的に呼ばれ、すべての待機中プレイヤーに`UpdateMatchings`メッセージが送信されます（参加したマッチングが一覧から消えます）。
+
+**コード:** [websocket.rs:343-345](../src/handlers/websocket.rs#L343-L345)
+
 ---
 
 ### 4. キャラクター選択（Ready）
