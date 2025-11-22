@@ -5,11 +5,14 @@ wscatでのテスト時にコピー&ペーストで使用できるメッセー�
 ## 接続コマンド
 
 ```bash
-# プレイヤーA（新規作成）
-wscat -c "ws://localhost:8080/ws?player_id=player_a"
+# プレイヤーA(新規接続)
+wscat -c "ws://localhost:8080/ws"
 
-# プレイヤーB（参加）
-wscat -c "ws://localhost:8080/ws?player_id=player_b"
+# プレイヤーB(新規接続)
+wscat -c "ws://localhost:8080/ws"
+
+# 再接続する場合(matching_idを指定)
+wscat -c "ws://localhost:8080/ws?matching_id=<MATCHING_ID>"
 ```
 
 ---
@@ -141,7 +144,7 @@ wscat -c "ws://localhost:8080/ws?player_id=player_b"
 
 ### 3. MatchingEstablished
 
-マッチング成立通知
+マッチング成立通知(JoinMatch直後に送信)
 
 ```json
 {
@@ -150,25 +153,39 @@ wscat -c "ws://localhost:8080/ws?player_id=player_b"
     "matching_id": "550e8400-e29b-41d4-a716-446655440000",
     "opponent_id": "player_b",
     "model_data": null,
+    "monster_stats": null,
     "timestamp": "2025-11-22T14:31:00Z"
   }
 }
 ```
 
+**注意:** `monster_stats`は`Ready`メッセージ送信時に`OpponentCharacterSelected`で送信されます。
+
 ### 4. OpponentCharacterSelected
 
-相手のキャラクター選択通知
+相手のキャラクター選択通知(相手がReady送信時に受信)
 
 ```json
 {
   "type": "OpponentCharacterSelected",
   "data": {
     "character": {
-      "model_id": "character_warrior",
+      "model_id": "9e7d246b-57cd-47de-94f1-4192f3dc075e",
       "position": {"x": 0.0, "y": 0.0, "z": 0.0},
       "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
       "hp": 100,
       "max_hp": 100
+    },
+    "monster_stats": {
+      "name": "Warrior",
+      "max_hp": 100,
+      "short_range_attack_power": 20,
+      "long_range_attack_power": 0,
+      "defense_power": 5,
+      "move_speed": 3,
+      "attack_range": 1,
+      "attack_cooldown": 800,
+      "size_type": "Medium"
     },
     "timestamp": "2025-11-22T14:31:05Z"
   }
@@ -258,16 +275,16 @@ wscat -c "ws://localhost:8080/ws?player_id=player_b"
 ### シナリオ1: 基本的なゲームフロー
 
 ```bash
-# 1. WebSocket接続（Player A）
-wscat -c "ws://localhost:8080/ws?player_id=player_a"
+# 1. WebSocket接続(Player A)
+wscat -c "ws://localhost:8080/ws"
 
 # 2. マッチング作成
 > {"type":"CreateMatching","data":{"username":"Taro"}}
 
 # 3. 受信: MatchingCreated
 
-# 4. WebSocket接続（Player B）
-wscat -c "ws://localhost:8080/ws?player_id=player_b"
+# 4. WebSocket接続(Player B)
+wscat -c "ws://localhost:8080/ws"
 
 # 5. 受信: UpdateMatchings（マッチング一覧確認）
 

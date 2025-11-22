@@ -66,14 +66,13 @@ Note over PlayerA,PlayerB: GameStartはGameManagerのみが送信し、重複送
 
 #### 1.1 接続リクエスト
 
-**エンドポイント:** `ws://server/ws?player_id={id}&matching_id={id}`
+**エンドポイント:** `ws://server/ws?matching_id={id}`
 
 **クエリパラメータ:**
-- `player_id` (必須): プレイヤーの一意識別子
-  - 指定がない場合、サーバーがUUIDを自動生成
 - `matching_id` (オプション): 既存のマッチングに再接続する場合に指定
+  - 指定がない場合、サーバーがUUIDを自動生成
 
-**コード:** [websocket.rs:754-783](../src/handlers/websocket.rs#L754-L783)
+**コード:** [websocket.rs:858-970](../src/handlers/websocket.rs#L858-L970)
 
 #### 1.2 接続時の処理
 
@@ -85,17 +84,18 @@ Note over PlayerA,PlayerB: GameStartはGameManagerのみが送信し、重複送
    - ゲームマネージャー参照
 
 2. **player_idの設定**
-   - クエリパラメータから取得
-   - なければUUID生成
+   - UUIDを自動生成
 
 3. **matching_idが指定されている場合**
    - セッションの有効性チェック（`is_valid()`）
    - 無効な場合はエラーを返す
    - 有効な場合、`last_active_at`をクリア（再接続タイマー解除）
-    - `WsChannels`に登録
-    - `matching_id`がない場合、`LobbyPlayers`に登録
+   - `WsChannels`に登録
 
-**コード:** [websocket.rs:784-808](../src/handlers/websocket.rs#L784-L808)
+4. **matching_idがない場合**
+   - `LobbyPlayers`に登録
+
+**コード:** [websocket.rs:709-712, 714-784](../src/handlers/websocket.rs#L709-L712)
 
 ---
 
@@ -117,7 +117,7 @@ Note over PlayerA,PlayerB: GameStartはGameManagerのみが送信し、重複送
 
 #### 2.2 サーバー側の処理
 
-**コード:** [websocket.rs:89-159](../src/handlers/websocket.rs#L89-L159)
+**コード:** [websocket.rs:96-178](../src/handlers/websocket.rs#L96-L178)
 
 1. **MatchingSessionの作成**
 
@@ -186,7 +186,7 @@ Note over PlayerA,PlayerB: GameStartはGameManagerのみが送信し、重複送
 
 `broadcast_update_matchings()`が自動的に呼ばれ、すべての待機中プレイヤー（`WaitingPlayers`）およびロビー待機プレイヤー（`LobbyPlayers`）に`UpdateMatchings`メッセージが送信されます。
 
-**コード:** [websocket.rs:161-191](../src/handlers/websocket.rs#L161-L191)
+**コード:** [websocket.rs:180-238](../src/handlers/websocket.rs#L180-L238)
 
 ---
 
@@ -205,7 +205,7 @@ Note over PlayerA,PlayerB: GameStartはGameManagerのみが送信し、重複送
 
 #### 3.2 サーバー側の処理
 
-**コード:** [websocket.rs:193-294](../src/handlers/websocket.rs#L193-L294)
+**コード:** [websocket.rs:240-394](../src/handlers/websocket.rs#L240-L394)
 
 1. **バリデーション**
    - マッチングセッションが存在するか確認
@@ -241,16 +241,19 @@ Note over PlayerA,PlayerB: GameStartはGameManagerのみが送信し、重複送
     "matching_id": "a1b2c3d4-...",
     "opponent_id": "player_b",
     "model_data": null,
+    "monster_stats": null,
     "timestamp": "2025-11-22T14:30:01Z"
   }
 }
 ```
 
+**注意:** `monster_stats`は`Ready`メッセージ送信時に`OpponentCharacterSelected`で送信されます。
+
 #### 3.4 他の待機中プレイヤーへの通知
 
 `broadcast_update_matchings()`が自動的に呼ばれ、すべての待機中プレイヤーおよびロビー待機プレイヤーに`UpdateMatchings`メッセージが送信されます（参加したマッチングが一覧から消えます）。
 
-**コード:** [websocket.rs:343-345](../src/handlers/websocket.rs#L343-L345)
+**コード:** [websocket.rs:392-394](../src/handlers/websocket.rs#L392-L394)
 
 ---
 
@@ -269,7 +272,7 @@ Note over PlayerA,PlayerB: GameStartはGameManagerのみが送信し、重複送
 
 #### 4.2 サーバー側の処理
 
-**コード:** [websocket.rs:296-577](../src/handlers/websocket.rs#L296-L577)
+**コード:** [websocket.rs:396-660](../src/handlers/websocket.rs#L396-L660)
 
 1. **モデルの検証（非同期）**
 
@@ -313,6 +316,17 @@ Note over PlayerA,PlayerB: GameStartはGameManagerのみが送信し、重複送
          "hp": 100,
          "max_hp": 100
        },
+       "monster_stats": {
+         "name": "Warrior",
+         "max_hp": 100,
+         "short_range_attack_power": 20,
+         "long_range_attack_power": 0,
+         "defense_power": 5,
+         "move_speed": 3,
+         "attack_range": 1,
+         "attack_cooldown": 800,
+         "size_type": "Medium"
+       },
        "timestamp": "2025-11-22T14:30:02Z"
      }
    }
@@ -324,7 +338,7 @@ Note over PlayerA,PlayerB: GameStartはGameManagerのみが送信し、重複送
 
 #### 5.1 両者準備完了の判定
 
-**コード:** [websocket.rs:413-545](../src/handlers/websocket.rs#L413-L545)
+**コード:** [websocket.rs:516-660](../src/handlers/websocket.rs#L516-L660)
 
 ```rust
 if session.is_both_ready() {
@@ -402,7 +416,7 @@ if session.is_both_ready() {
 
 **サーバー側の処理:**
 
-**コード:** [websocket.rs:601-621](../src/handlers/websocket.rs#L601-L621)
+**コード:** [websocket.rs:683-703](../src/handlers/websocket.rs#L683-L703)
 
 ```rust
 self.game_manager.do_send(ProcessStateUpdate {
@@ -570,7 +584,7 @@ if let Some(session) = sessions.get_mut(matching_id) {
 
 #### 8.1 プレイヤーの切断
 
-**コード:** [websocket.rs:632-669](../src/handlers/websocket.rs#L632-L669)
+**コード:** [websocket.rs:714-784](../src/handlers/websocket.rs#L714-L784)
 
 1. **待機リストから削除**
 
