@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use tokio::time::sleep;
 use uuid::Uuid;
 use webscoket_realtime_prac::game::manager::GameManager;
-use webscoket_realtime_prac::handlers::{MatchingSessions, WaitingPlayers, WsChannels};
+use webscoket_realtime_prac::handlers::MatchingSessions;
 use webscoket_realtime_prac::models::{MatchingSession, MatchingStatus, Player};
 
 #[actix_rt::test]

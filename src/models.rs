@@ -68,15 +68,6 @@ impl Player {
             ready: false,
         }
     }
-
-    pub fn new_with_model(id: String, model_id: String) -> Self {
-        Self {
-            id,
-            selected_model_id: Some(model_id),
-            character: None,
-            ready: false,
-        }
-    }
 }
 
 // マッチングセッション状態
@@ -107,19 +98,6 @@ impl MatchingSession {
         Self {
             matching_id: Uuid::new_v4(),
             player_a: Player::new(player_a_id),
-            player_b: None,
-            status: MatchingStatus::Waiting,
-            created_at: Utc::now(),
-            last_active_at: None,
-            is_battle_started: false,
-            is_battle_finished: false,
-        }
-    }
-
-    pub fn new_with_model(player_a_id: String, model_id: String) -> Self {
-        Self {
-            matching_id: Uuid::new_v4(),
-            player_a: Player::new_with_model(player_a_id, model_id),
             player_b: None,
             status: MatchingStatus::Waiting,
             created_at: Utc::now(),
@@ -195,12 +173,9 @@ pub struct GameResult {
 #[serde(tag = "type", content = "data")]
 pub enum WsMessage {
     // クライアント→サーバー
-    CreateMatching {
-        selected_model_id: String,
-    }, // マッチング作成要求
+    CreateMatching, // マッチング作成要求
     JoinMatch {
         matching_id: Uuid,
-        selected_model_id: String,
     }, // マッチング参加要求
     Ready {
         selected_model_id: String,
@@ -226,7 +201,7 @@ pub enum WsMessage {
     MatchingEstablished {
         matching_id: Uuid,
         opponent_id: String,
-        opponent_model: Option<crate::db::models::Model3D>,
+        model_data: Option<crate::db::models::Model3D>,
         timestamp: DateTime<Utc>,
     },
     MatchingSuccess {
@@ -256,29 +231,6 @@ pub enum WsMessage {
     Error {
         message: String,
     },
-}
-
-// REST APIリクエスト/レスポンス
-#[derive(Debug, Deserialize)]
-pub struct CreateMatchingRequest {
-    pub player_id: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CreateMatchingResponse {
-    pub matching_id: Uuid,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct JoinMatchingRequest {
-    pub matching_id: Uuid,
-    pub player_id: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JoinMatchingResponse {
-    pub success: bool,
-    pub message: Option<String>,
 }
 
 // 3Dモデルアップロード関連
