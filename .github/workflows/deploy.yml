@@ -49,10 +49,8 @@ jobs:
 
       - name: Verify Teleport connection
         run: |
-          # Identity Fileを使って接続確認
-          tsh -i ${{ env.TELEPORT_IDENTITY_FILE }} ls
-        env:
-          TELEPORT_IDENTITY_FILE: ${{ env.TELEPORT_IDENTITY_FILE }}
+          # Identity Fileを使って接続確認（実際のSSH接続テスト）
+          tsh -i ${{ env.TELEPORT_IDENTITY_FILE }} ssh ${{ secrets.DEPLOY_USER }}@${{ env.DEPLOY_SERVER }} "echo 'Teleport connection successful'"
 
       - name: Deploy to server
         run: |
