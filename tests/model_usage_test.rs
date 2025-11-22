@@ -1,9 +1,9 @@
 use actix::Actor;
 use actix_test;
-use actix_web::{App, test, web};
+use actix_web::{App, web};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
-use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
+use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::time::{Duration, timeout};

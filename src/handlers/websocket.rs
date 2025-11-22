@@ -156,6 +156,9 @@ impl WsSession {
             matching_id,
             current_matchings.len()
         );
+
+        // 他の待機中プレイヤーに通知
+        self.broadcast_update_matchings();
     }
 
     /// UpdateMatchingsをブロードキャスト
