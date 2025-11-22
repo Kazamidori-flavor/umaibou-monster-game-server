@@ -199,7 +199,7 @@ wscat -c "ws://localhost:8080/ws"
 接続後、以下のメッセージを送信：
 
 ```json
-{"type":"CreateMatching"}
+{"type":"CreateMatching","data":{"username":"Taro"}}
 ```
 
 **プレイヤーAが受信するメッセージ：**
@@ -209,11 +209,20 @@ wscat -c "ws://localhost:8080/ws"
   "type": "MatchingCreated",
   "data": {
     "matching_id": "550e8400-e29b-41d4-a716-446655440000",
-    "current_matchings": [],
+    "current_matchings": [
+      {
+        "matching_id": "e5f6g7h8-...",
+        "creator_username": "Hanako",
+        "created_at": "2025-11-22T12:00:00Z",
+        "status": "Waiting"
+      }
+    ],
     "timestamp": "2025-11-22T12:34:56.789Z"
   }
 }
 ```
+
+**補足:** `current_matchings`には、現在待機中の他のマッチング情報が含まれます。自分自身のマッチングは含まれません。
 
 **確認ポイント：**
 - ✅ `matching_id`が返される（マッチング待機中）
@@ -240,7 +249,14 @@ wscat -c "ws://localhost:8080/ws"
 {
   "type": "UpdateMatchings",
   "data": {
-    "current_matchings": ["550e8400-e29b-41d4-a716-446655440000"],
+    "current_matchings": [
+      {
+        "matching_id": "550e8400-e29b-41d4-a716-446655440000",
+        "creator_username": "Taro",
+        "created_at": "2025-11-22T12:34:56.789Z",
+        "status": "Waiting"
+      }
+    ],
     "timestamp": "2025-11-22T12:35:00.123Z"
   }
 }
@@ -464,7 +480,7 @@ wscat -c "ws://localhost:8080/ws"
 wscat -c "ws://localhost:8080/ws"
 
 # プレイヤーA: マッチング作成
-> {"type":"CreateMatching"}
+> {"type":"CreateMatching","data":{"username":"Taro"}}
 # => プレイヤーA: MatchingCreatedを受信
 # => プレイヤーB: UpdateMatchingsを自動受信（リアルタイム通知）
 
