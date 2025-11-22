@@ -4,7 +4,7 @@ set -e
 # 環境変数のデフォルト値
 DEPLOY_USER="${DEPLOY_USER:-$(whoami)}"
 DEPLOY_SERVER="${DEPLOY_SERVER:-ct108}"
-DEPLOY_PATH="Projects/umaibou-monster-game-server"
+DEPLOY_PATH="${DEPLOY_PATH:-Projects}"
 
 # カラー出力
 GREEN='\033[0;32m'
@@ -16,9 +16,18 @@ echo -e "${YELLOW}========================================${NC}"
 echo -e "${YELLOW}Rolling back to previous version${NC}"
 echo -e "${YELLOW}========================================${NC}"
 
+REMOTE_HOST="${DEPLOY_SERVER}"
+REMOTE_USER="${DEPLOY_USER}"
+REMOTE_BASE_DIR="/home/${REMOTE_USER}/${DEPLOY_PATH}"
+REMOTE_APP_DIR="${REMOTE_BASE_DIR}/umaibou-monster-game-server"
+BACKUP_DIR="${REMOTE_BASE_DIR}/umaibou-monster-game-server.backup"
+FAILED_DIR="${REMOTE_BASE_DIR}/umaibou-monster-game-server.failed"
+
+SSH_CMD="ssh"
+
 # バックアップの存在確認
 echo "Checking for backup..."
-BACKUP_EXISTS=$(tsh ssh ${DEPLOY_USER}@${DEPLOY_SERVER} "[ -d ~/Projects/umaibou-monster-game-server.backup ] && echo 'yes' || echo 'no'")
+BACKUP_EXISTS=$($SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} "[ -d ${BACKUP_DIR} ] && echo 'yes' || echo 'no'")
 
 if [ "$BACKUP_EXISTS" != "yes" ]; then
     echo -e "${RED}Error: No backup found. Cannot rollback.${NC}"
@@ -27,7 +36,7 @@ fi
 
 # サービス停止
 echo -e "${YELLOW}Stopping current service...${NC}"
-tsh ssh ${DEPLOY_USER}@${DEPLOY_SERVER} << 'EOF'
+$SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} << EOF
     if pgrep -f umaibou-monster-game-server > /dev/null; then
         echo "Stopping service..."
         pkill -TERM -f umaibou-monster-game-server || true
@@ -40,32 +49,31 @@ EOF
 
 # ロールバック実行
 echo -e "${YELLOW}Restoring backup...${NC}"
-tsh ssh ${DEPLOY_USER}@${DEPLOY_SERVER} << 'EOF'
-    cd ~/Projects
-
+$SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} << EOF
     # 現在のバージョンを一時的に保存
-    if [ -d "umaibou-monster-game-server" ]; then
-        mv umaibou-monster-game-server umaibou-monster-game-server.failed
+    if [ -d "${REMOTE_APP_DIR}" ]; then
+        rm -rf "${FAILED_DIR}"
+        mv "${REMOTE_APP_DIR}" "${FAILED_DIR}"
     fi
 
     # バックアップを復元
-    mv umaibou-monster-game-server.backup umaibou-monster-game-server
+    mv "${BACKUP_DIR}" "${REMOTE_APP_DIR}"
 
     echo "Backup restored"
 EOF
 
 # サービス再起動
 echo -e "${YELLOW}Starting previous version...${NC}"
-tsh ssh ${DEPLOY_USER}@${DEPLOY_SERVER} << 'EOF'
-    cd ~/Projects/umaibou-monster-game-server
+$SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} << EOF
+    cd ${REMOTE_APP_DIR}
     nohup ./umaibou-monster-game-server > server.log 2>&1 &
-    echo $! > server.pid
+    echo \$! > server.pid
     echo "Service restarted"
 EOF
 
 # ヘルスチェック
 sleep 3
-tsh ssh ${DEPLOY_USER}@${DEPLOY_SERVER} << 'EOF'
+$SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} << EOF
     if pgrep -f umaibou-monster-game-server > /dev/null; then
         echo "✓ Service is running"
     else
@@ -74,6 +82,4 @@ tsh ssh ${DEPLOY_USER}@${DEPLOY_SERVER} << 'EOF'
     fi
 EOF
 
-echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Rollback completed successfully${NC}"
-echo -e "${GREEN}========================================${NC}"

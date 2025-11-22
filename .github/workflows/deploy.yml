@@ -4,11 +4,15 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # 手動実行も可能に
+  workflow_dispatch:
 
 env:
   RUST_VERSION: "1.70"
-  TELEPORT_VERSION: "14.3.0"
+  # Teleportの設定
+  TELEPORT_PROXY: teleport.localhouse.jp:443
+  TELEPORT_AUTH_TOKEN: github-token  # token.yamlで定義した名前
+  DEPLOY_SERVER: ct108               # Teleport上のノード名
+  DEPLOY_PATH: Projects
 
 jobs:
   # mainにマージされたブランチがreleaseかチェック
@@ -25,15 +29,12 @@ jobs:
       - name: Check if merge from release branch
         id: check
         run: |
-          # 直前のコミットメッセージを確認
           COMMIT_MSG=$(git log -1 --pretty=%B)
           echo "Commit message: $COMMIT_MSG"
 
-          # workflow_dispatchの場合は常にデプロイ
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "should_deploy=true" >> $GITHUB_OUTPUT
             echo "Manual deployment triggered"
-          # releaseブランチからのマージをチェック
           elif echo "$COMMIT_MSG" | grep -qE "Merge.*release"; then
             echo "should_deploy=true" >> $GITHUB_OUTPUT
             echo "Release branch merged, will deploy"
@@ -46,6 +47,11 @@ jobs:
     needs: check-release
     if: needs.check-release.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
+
+    # OIDC認証に必須の権限設定
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout code
@@ -61,49 +67,31 @@ jobs:
           cargo build --release --bin umaibou-monster-game-server
           chmod +x target/release/umaibou-monster-game-server
 
+      # Teleportのセットアップ (バージョンはサーバーに合わせて調整推奨)
       - name: Install Teleport
-        run: |
-          curl -O https://cdn.teleport.dev/teleport-v${{ env.TELEPORT_VERSION }}-linux-amd64-bin.tar.gz
-          tar -xzf teleport-v${{ env.TELEPORT_VERSION }}-linux-amd64-bin.tar.gz
-          sudo mv teleport/tsh /usr/local/bin/
-          sudo mv teleport/tctl /usr/local/bin/
-          tsh version
+        uses: teleport-actions/setup@v1
+        with:
+          version: 16.4.7
 
-      - name: Configure Teleport Machine ID
-        run: |
-          # Teleport Machine ID用のディレクトリ作成
-          mkdir -p ~/.tsh
-
-          # トークンをファイルに保存
-          echo "${{ secrets.TELEPORT_TOKEN }}" > /tmp/teleport-token
-
-          # Teleportにログイン
-          tsh login \
-            --proxy=teleport.localhouse.jp:443 \
-            --auth=token \
-            --token=$(cat /tmp/teleport-token) \
-            --user=github-actions
-
-          # トークンファイルを削除
-          rm /tmp/teleport-token
+      # Teleport OIDC認証 (Machine ID)
+      - name: Authenticate with Teleport
+        uses: teleport-actions/auth@v2
+        with:
+          proxy: ${{ env.TELEPORT_PROXY }}
+          token: ${{ env.TELEPORT_AUTH_TOKEN }}
+          certificate-ttl: 1h
+          anonymous-telemetry: 0
 
       - name: Deploy to server
         run: |
           chmod +x scripts/deploy.sh
           scripts/deploy.sh
         env:
-          DEPLOY_SERVER: ct108
-          DEPLOY_NODE: CT108
-          DEPLOY_PATH: Projects
+          DEPLOY_SERVER: ${{ env.DEPLOY_SERVER }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
 
       - name: Verify deployment
         run: |
-          # サーバーでアプリケーションが実行中か確認
-          tsh ssh ${{ secrets.DEPLOY_USER }}@ct108 "pgrep -f umaibou-monster-game-server && echo 'Service is running' || echo 'Service is not running'"
-
-      - name: Cleanup
-        if: always()
-        run: |
-          # Teleportセッションをクリーンアップ
-          tsh logout || true
+          # sshコマンドがそのまま使えるようになっている
+          ssh ${{ secrets.DEPLOY_USER }}@${{ env.DEPLOY_SERVER }} "pgrep -f umaibou-monster-game-server && echo 'Service is running'"

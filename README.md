@@ -33,18 +33,92 @@ WebSocketによる60Hzのゲーム状態配信とREST APIによるマッチン�
 
 ### ビルド & 起動
 
+## 🚀 デプロイメント
+
+### 概要
+
+- **トリガー**: `release`ブランチが`main`にマージされたとき
+- **デプロイ方法**: GitHub Actions + Teleport (OIDC認証)
+- **デプロイ先**: `ct108` (Teleport経由)
+
+### 初期設定
+
+#### 1. Teleport側の設定 (Machine ID)
+
+プロジェクトに含まれる設定ファイルを使用して、TeleportサーバーでBotとトークンを作成します。
+
+**1. ロールの作成 (`teleport-config/role.yaml`)**
+
 ```bash
-# リポジトリクローン（または既存プロジェクトに移動）
-cd umaibou-monster-game-server
-
-# ビルド
-cargo build
-
-# 起動
-cargo run
+tctl create teleport-config/role.yaml
 ```
 
-サーバーは `http://0.0.0.0:8080` で起動します。
+**2. トークンの作成 (`teleport-config/token.yaml`)**
+※ `token.yaml` 内のリポジトリ名が正しいか確認してから実行してください。
+
+```bash
+tctl create teleport-config/token.yaml
+```
+
+**3. Botユーザーの紐付け**
+
+```bash
+tctl users add --roles=github-actions-deployer github-actions
+```
+
+#### 2. GitHubシークレットの設定
+
+リポジトリの Settings > Secrets and variables > Actions で以下を追加：
+
+- **`DEPLOY_USER`**: デプロイ先サーバーのユーザー名（例: `ubuntu`）
+
+※ Teleportのプロキシアドレスなどはワークフロー内で環境変数として定義されていますが、必要に応じてSecretsに移動することも可能です。
+
+### デプロイ方法
+
+#### 自動デプロイ（推奨）
+
+```bash
+# 機能開発
+git checkout -b feature/new-feature
+# ... 開発作業 ...
+git commit -m "feat: add new feature"
+
+# releaseブランチにマージ
+git checkout release
+git merge feature/new-feature
+
+# mainにマージ → デプロイ自動実行
+git checkout main
+git merge release
+git push origin main
+```
+
+#### 手動デプロイ
+
+GitHub Actionsの画面から **Run workflow** で手動実行可能。
+
+### デプロイの確認
+
+```bash
+# サーバーにSSH接続
+tsh ssh your-username@ct108
+
+# サービスの状態確認
+pgrep -f umaibou-monster-game-server
+
+# ログの確認
+tail -f ~/Projects/umaibou-monster-game-server/server.log
+```
+
+### ロールバック
+
+```bash
+# ローカルマシンから（tshではなくssh/scpを使用する場合）
+# Teleport経由でssh接続できる環境が必要です
+export DEPLOY_USER=your-username
+./scripts/rollback.sh
+```
 
 ## 📡 API仕様
 

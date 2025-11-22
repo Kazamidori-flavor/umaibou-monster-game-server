@@ -3,9 +3,9 @@ set -e  # エラーで即座に終了
 
 # 環境変数の確認
 : "${DEPLOY_SERVER:?DEPLOY_SERVER environment variable is required}"
-: "${DEPLOY_NODE:?DEPLOY_NODE environment variable is required}"
-: "${DEPLOY_PATH:?DEPLOY_PATH environment variable is required}"
 : "${DEPLOY_USER:?DEPLOY_USER environment variable is required}"
+# DEPLOY_PATHはデフォルト値を設定
+DEPLOY_PATH="${DEPLOY_PATH:-Projects}"
 
 # カラー出力
 GREEN='\033[0;32m'
@@ -17,34 +17,39 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Starting deployment to ${DEPLOY_SERVER}${NC}"
 echo -e "${GREEN}========================================${NC}"
 
-# デプロイ先のパス
-REMOTE_USER="${DEPLOY_USER}"
+# デプロイ先の設定
 REMOTE_HOST="${DEPLOY_SERVER}"
-REMOTE_PATH="/home/${REMOTE_USER}/${DEPLOY_PATH}/umaibou-monster-game-server"
-BACKUP_PATH="${REMOTE_PATH}.backup"
+REMOTE_USER="${DEPLOY_USER}"
+REMOTE_BASE_DIR="/home/${REMOTE_USER}/${DEPLOY_PATH}"
+REMOTE_APP_DIR="${REMOTE_BASE_DIR}/umaibou-monster-game-server"
+BACKUP_DIR="${REMOTE_BASE_DIR}/umaibou-monster-game-server.backup"
+
+# SSHコマンドのラッパー（オプションを一元管理）
+# StrictHostKeyChecking=no はTeleportのProxy経由の場合に便利だが、
+# teleport-actions/auth が known_hosts を管理してくれる場合は不要なこともある。
+# ここでは念のため安全側に倒してデフォルトの挙動に任せるが、
+# 接続エラーが出る場合は -o StrictHostKeyChecking=no を検討。
+SSH_CMD="ssh"
+SCP_CMD="scp"
 
 # 1. リモートサーバーでディレクトリ準備
 echo -e "${YELLOW}Step 1: Preparing remote directory...${NC}"
-tsh ssh ${REMOTE_USER}@${REMOTE_HOST} << 'EOF'
-    # ディレクトリが存在しない場合は作成
-    mkdir -p ~/Projects/umaibou-monster-game-server
-    cd ~/Projects/umaibou-monster-game-server
+$SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} << EOF
+    mkdir -p ${REMOTE_APP_DIR}
 
     # 既存のバックアップがあれば削除
-    if [ -d "../umaibou-monster-game-server.backup" ]; then
-        rm -rf "../umaibou-monster-game-server.backup"
+    if [ -d "${BACKUP_DIR}" ]; then
+        rm -rf "${BACKUP_DIR}"
     fi
 EOF
 
 # 2. 実行中のサービスを停止（存在する場合）
 echo -e "${YELLOW}Step 2: Stopping existing service...${NC}"
-tsh ssh ${REMOTE_USER}@${REMOTE_HOST} << 'EOF'
-    # プロセスが実行中か確認
+$SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} << EOF
     if pgrep -f umaibou-monster-game-server > /dev/null; then
         echo "Stopping umaibou-monster-game-server..."
         pkill -TERM -f umaibou-monster-game-server || true
         sleep 2
-        # 強制終了が必要な場合
         if pgrep -f umaibou-monster-game-server > /dev/null; then
             pkill -KILL -f umaibou-monster-game-server || true
         fi
@@ -56,11 +61,10 @@ EOF
 
 # 3. 現在のバージョンをバックアップ
 echo -e "${YELLOW}Step 3: Creating backup of current version...${NC}"
-tsh ssh ${REMOTE_USER}@${REMOTE_HOST} << EOF
-    cd ~/Projects
-    if [ -d "umaibou-monster-game-server/target" ]; then
+$SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} << EOF
+    if [ -d "${REMOTE_APP_DIR}/target" ] || [ -f "${REMOTE_APP_DIR}/umaibou-monster-game-server" ]; then
         echo "Creating backup..."
-        cp -r umaibou-monster-game-server umaibou-monster-game-server.backup
+        cp -r ${REMOTE_APP_DIR} ${BACKUP_DIR}
         echo "Backup created"
     else
         echo "No existing installation found, skipping backup"
@@ -72,76 +76,55 @@ echo -e "${YELLOW}Step 4: Uploading new version...${NC}"
 
 # バイナリをアップロード
 echo "Uploading binary..."
-tsh scp \
-    target/release/umaibou-monster-game-server \
-    ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
+$SCP_CMD target/release/umaibou-monster-game-server ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/
 
-# マイグレーションファイルをアップロード（存在する場合）
+# マイグレーションファイルをアップロード
 if [ -d "migrations" ]; then
     echo "Uploading migrations..."
-    tsh scp -r \
-        migrations \
-        ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
+    $SCP_CMD -r migrations ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/
 fi
 
-# dataディレクトリをアップロード（存在する場合）
+# dataディレクトリをアップロード
 if [ -d "data" ]; then
     echo "Uploading data directory..."
-    tsh scp -r \
-        data \
-        ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
+    $SCP_CMD -r data ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/
 fi
 
 # 5. パーミッション設定
 echo -e "${YELLOW}Step 5: Setting permissions...${NC}"
-tsh ssh ${REMOTE_USER}@${REMOTE_HOST} << EOF
-    cd ${REMOTE_PATH}
+$SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} << EOF
+    cd ${REMOTE_APP_DIR}
     chmod +x umaibou-monster-game-server
     echo "Permissions set"
 EOF
 
-# 6. データベースマイグレーション実行（必要な場合）
+# 6. データベースマイグレーション実行
 echo -e "${YELLOW}Step 6: Running database migrations...${NC}"
-tsh ssh ${REMOTE_USER}@${REMOTE_HOST} << 'EOF'
+$SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} << 'EOF'
     cd ~/Projects/umaibou-monster-game-server
-    # SQLxマイグレーションの実行
     if [ -f "umaibou-monster-game-server" ] && [ -d "migrations" ]; then
-        # DATABASE_URLが設定されていない場合のデフォルト値
         export DATABASE_URL="${DATABASE_URL:-sqlite://data/game.db}"
-
-        # マイグレーションの実行は手動で行う想定
-        # （sqlx-cliが必要なため）
-        echo "Migration files deployed. Please run migrations manually if needed:"
-        echo "  sqlx migrate run"
+        echo "Migration files deployed. Run 'sqlx migrate run' manually if needed."
     fi
 EOF
 
 # 7. サービスを起動
 echo -e "${YELLOW}Step 7: Starting service...${NC}"
-tsh ssh ${REMOTE_USER}@${REMOTE_HOST} << 'EOF'
-    cd ~/Projects/umaibou-monster-game-server
-
-    # バックグラウンドでサービスを起動
+$SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} << EOF
+    cd ${REMOTE_APP_DIR}
     nohup ./umaibou-monster-game-server > server.log 2>&1 &
-
-    # プロセスIDを保存
-    echo $! > server.pid
-
-    echo "Service started with PID: $(cat server.pid)"
+    echo \$! > server.pid
+    echo "Service started with PID: \$(cat server.pid)"
 EOF
 
 # 8. ヘルスチェック
 echo -e "${YELLOW}Step 8: Health check...${NC}"
-sleep 3  # サービス起動を待つ
+sleep 3
 
-tsh ssh ${REMOTE_USER}@${REMOTE_HOST} << 'EOF'
-    cd ~/Projects/umaibou-monster-game-server
-
-    # プロセスが実行中か確認
+$SSH_CMD ${REMOTE_USER}@${REMOTE_HOST} << EOF
+    cd ${REMOTE_APP_DIR}
     if pgrep -f umaibou-monster-game-server > /dev/null; then
         echo "✓ Service is running"
-
-        # ポート8080がリッスンしているか確認
         if ss -tuln | grep -q :8080; then
             echo "✓ Service is listening on port 8080"
         else
@@ -149,23 +132,9 @@ tsh ssh ${REMOTE_USER}@${REMOTE_HOST} << 'EOF'
         fi
     else
         echo "✗ Service failed to start"
-        echo "Last 20 lines of log:"
         tail -n 20 server.log
         exit 1
     fi
 EOF
 
-# 9. デプロイ完了
-echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Deployment completed successfully!${NC}"
-echo -e "${GREEN}========================================${NC}"
-echo ""
-echo "Server: ${REMOTE_HOST}"
-echo "Path: ${REMOTE_PATH}"
-echo "Service status: Running"
-echo ""
-echo "To view logs:"
-echo "  tsh ssh ${REMOTE_USER}@${REMOTE_HOST} 'tail -f ~/Projects/umaibou-monster-game-server/server.log'"
-echo ""
-echo "To rollback:"
-echo "  Run: scripts/rollback.sh"
