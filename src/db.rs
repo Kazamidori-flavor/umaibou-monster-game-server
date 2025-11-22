@@ -1,8 +1,8 @@
 pub mod models;
 
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
-use std::path::Path;
 use crate::db::models::Model3D;
+use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
+use std::path::Path;
 use uuid::Uuid;
 
 /// データベース接続プールを初期化
@@ -11,7 +11,8 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
 
     // データベースファイルのディレクトリを作成
     if let Some(parent) = Path::new(database_url.trim_start_matches("sqlite://")).parent() {
-        tokio::fs::create_dir_all(parent).await
+        tokio::fs::create_dir_all(parent)
+            .await
             .map_err(|e| sqlx::Error::Io(e))?;
     }
 
@@ -21,34 +22,12 @@ pub async fn init_db(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
         .connect(&format!("{}?mode=rwc", database_url))
         .await?;
 
-    // テーブル作成
-    create_tables(&pool).await?;
+    // マイグレーション実行
+    sqlx::migrate!("./migrations").run(&pool).await?;
 
     println!("✅ Database initialized successfully");
 
     Ok(pool)
-}
-
-/// テーブル作成
-async fn create_tables(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS models (
-            id TEXT PRIMARY KEY,
-            file_name TEXT NOT NULL,
-            file_path TEXT NOT NULL,
-            file_size INTEGER NOT NULL,
-            mime_type TEXT NOT NULL,
-            uploaded_at TEXT NOT NULL
-        )
-        "#
-    )
-    .execute(pool)
-    .await?;
-
-    println!("✅ Tables created successfully");
-
-    Ok(())
 }
 
 /// テストモデルを自動登録
@@ -66,8 +45,12 @@ pub async fn load_test_models(pool: &SqlitePool) {
                     let path = entry.path();
                     let path_str = path.to_str().unwrap_or("").to_string();
                     // ファイル名から拡張子を除いた部分をmodel_idに使用
-                    let model_id = format!("character_{}",
-                        file_name.trim_end_matches(".glb").to_lowercase().replace(" ", "_")
+                    let model_id = format!(
+                        "character_{}",
+                        file_name
+                            .trim_end_matches(".glb")
+                            .to_lowercase()
+                            .replace(" ", "_")
                     );
                     test_models.push((model_id, path_str));
                 }
@@ -98,7 +81,12 @@ pub async fn load_test_models(pool: &SqlitePool) {
 
         let model = Model3D::new(
             model_id.to_string(),
-            Path::new(&file_path).file_name().unwrap().to_str().unwrap().to_string(),
+            Path::new(&file_path)
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string(),
             file_path.to_string(),
             file_size,
             "model/gltf-binary".to_string(),

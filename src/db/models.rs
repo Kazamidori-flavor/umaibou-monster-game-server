@@ -1,6 +1,6 @@
 use chrono::Utc;
-use sqlx::SqlitePool;
 use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 
 /// データベース3Dモデル
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
@@ -34,18 +34,18 @@ impl Model3D {
 
     /// モデルをデータベースに挿入
     pub async fn insert(&self, pool: &SqlitePool) -> Result<(), sqlx::Error> {
-        sqlx::query(
+        sqlx::query!(
             r#"
             INSERT INTO models (id, file_name, file_path, file_size, mime_type, uploaded_at)
             VALUES (?, ?, ?, ?, ?, ?)
-            "#
+            "#,
+            self.id,
+            self.file_name,
+            self.file_path,
+            self.file_size,
+            self.mime_type,
+            self.uploaded_at
         )
-        .bind(&self.id)
-        .bind(&self.file_name)
-        .bind(&self.file_path)
-        .bind(self.file_size)
-        .bind(&self.mime_type)
-        .bind(&self.uploaded_at)
         .execute(pool)
         .await?;
 
@@ -54,21 +54,29 @@ impl Model3D {
 
     /// IDでモデルを取得
     pub async fn find_by_id(pool: &SqlitePool, id: &str) -> Result<Option<Model3D>, sqlx::Error> {
-        let model = sqlx::query_as::<_, Model3D>(
-            "SELECT * FROM models WHERE id = ?"
+        let model = sqlx::query_as!(
+            Model3D,
+            r#"
+            SELECT
+                id as "id!",
+                file_name as "file_name!",
+                file_path as "file_path!",
+                file_size as "file_size!",
+                mime_type as "mime_type!",
+                uploaded_at as "uploaded_at!"
+            FROM models WHERE id = ?
+            "#,
+            id
         )
-        .bind(id)
         .fetch_optional(pool)
         .await?;
 
         Ok(model)
     }
 
-
     /// IDでモデルを削除
     pub async fn delete_by_id(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::Error> {
-        let result = sqlx::query("DELETE FROM models WHERE id = ?")
-            .bind(id)
+        let result = sqlx::query!("DELETE FROM models WHERE id = ?", id)
             .execute(pool)
             .await?;
 
