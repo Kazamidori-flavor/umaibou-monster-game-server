@@ -49,8 +49,13 @@ jobs:
 
       - name: Verify Teleport connection
         run: |
+          # Identity fileの内容を確認（デバッグ用）
+          echo "Checking identity file..."
+          ls -la auth.pem
+
           # Identity Fileを使って接続確認（実際のSSH接続テスト）
-          tsh -i ${{ env.TELEPORT_IDENTITY_FILE }} ssh ${{ secrets.DEPLOY_USER }}@${{ env.DEPLOY_SERVER }} "echo 'Teleport connection successful'"
+          echo "Attempting to connect to ${{ env.DEPLOY_SERVER }} via ${{ env.TELEPORT_PROXY }}..."
+          tsh --proxy=${{ env.TELEPORT_PROXY }} -i ${{ env.TELEPORT_IDENTITY_FILE }} ssh ${{ secrets.DEPLOY_USER }}@${{ env.DEPLOY_SERVER }} "echo 'Teleport connection successful'"
 
       - name: Deploy to server
         run: |
@@ -60,11 +65,12 @@ jobs:
           DEPLOY_SERVER: ${{ env.DEPLOY_SERVER }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
+          TELEPORT_PROXY: ${{ env.TELEPORT_PROXY }}
           TELEPORT_IDENTITY_FILE: ${{ env.TELEPORT_IDENTITY_FILE }}
 
       - name: Verify deployment
         run: |
-          tsh -i ${{ env.TELEPORT_IDENTITY_FILE }} ssh ${{ secrets.DEPLOY_USER }}@${{ env.DEPLOY_SERVER }} "pgrep -f umaibou-monster-game-server && echo 'Service is running'"
+          tsh --proxy=${{ env.TELEPORT_PROXY }} -i ${{ env.TELEPORT_IDENTITY_FILE }} ssh ${{ secrets.DEPLOY_USER }}@${{ env.DEPLOY_SERVER }} "pgrep -f umaibou-monster-game-server && echo 'Service is running'"
 
       - name: Cleanup
         if: always()

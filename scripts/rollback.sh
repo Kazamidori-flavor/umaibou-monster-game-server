@@ -16,10 +16,15 @@ echo -e "${YELLOW}========================================${NC}"
 echo -e "${YELLOW}Rolling back to previous version${NC}"
 echo -e "${YELLOW}========================================${NC}"
 
-# Teleport Identity Fileの設定
+# Teleport設定
 TSH_OPTS=""
+if [ -n "${TELEPORT_PROXY}" ]; then
+    TSH_OPTS="--proxy=${TELEPORT_PROXY}"
+    echo -e "${YELLOW}Using Teleport proxy: ${TELEPORT_PROXY}${NC}"
+fi
+
 if [ -n "${TELEPORT_IDENTITY_FILE}" ]; then
-    TSH_OPTS="-i ${TELEPORT_IDENTITY_FILE}"
+    TSH_OPTS="${TSH_OPTS} -i ${TELEPORT_IDENTITY_FILE}"
     echo -e "${YELLOW}Using Teleport identity file: ${TELEPORT_IDENTITY_FILE}${NC}"
 fi
 
