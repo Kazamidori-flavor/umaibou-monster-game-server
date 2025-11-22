@@ -38,20 +38,21 @@ jobs:
           sudo mv teleport/tsh /usr/local/bin/
           tsh version
 
-      - name: Authenticate with Teleport
+      - name: Setup Teleport Identity
         run: |
           # Identity FileをSecretsから復元
           echo "${{ secrets.TELEPORT_IDENTITY }}" > auth.pem
           chmod 600 auth.pem
 
-          # Identity Fileを使ってログイン
-          tsh login \
-            --proxy=${{ env.TELEPORT_PROXY }} \
-            --auth=local \
-            --identity=auth.pem
+          # Identity fileのパスを絶対パスで取得
+          echo "TELEPORT_IDENTITY_FILE=$(pwd)/auth.pem" >> $GITHUB_ENV
 
-          # 接続確認
-          tsh ls
+      - name: Verify Teleport connection
+        run: |
+          # Identity Fileを使って接続確認
+          tsh -i ${{ env.TELEPORT_IDENTITY_FILE }} ls
+        env:
+          TELEPORT_IDENTITY_FILE: ${{ env.TELEPORT_IDENTITY_FILE }}
 
       - name: Deploy to server
         run: |
@@ -61,10 +62,11 @@ jobs:
           DEPLOY_SERVER: ${{ env.DEPLOY_SERVER }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
+          TELEPORT_IDENTITY_FILE: ${{ env.TELEPORT_IDENTITY_FILE }}
 
       - name: Verify deployment
         run: |
-          tsh ssh ${{ secrets.DEPLOY_USER }}@${{ env.DEPLOY_SERVER }} "pgrep -f umaibou-monster-game-server && echo 'Service is running'"
+          tsh -i ${{ env.TELEPORT_IDENTITY_FILE }} ssh ${{ secrets.DEPLOY_USER }}@${{ env.DEPLOY_SERVER }} "pgrep -f umaibou-monster-game-server && echo 'Service is running'"
 
       - name: Cleanup
         if: always()

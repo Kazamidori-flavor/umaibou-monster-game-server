@@ -16,6 +16,13 @@ echo -e "${YELLOW}========================================${NC}"
 echo -e "${YELLOW}Rolling back to previous version${NC}"
 echo -e "${YELLOW}========================================${NC}"
 
+# Teleport Identity Fileの設定
+TSH_OPTS=""
+if [ -n "${TELEPORT_IDENTITY_FILE}" ]; then
+    TSH_OPTS="-i ${TELEPORT_IDENTITY_FILE}"
+    echo -e "${YELLOW}Using Teleport identity file: ${TELEPORT_IDENTITY_FILE}${NC}"
+fi
+
 REMOTE_TARGET="${DEPLOY_USER}@${DEPLOY_SERVER}"
 REMOTE_BASE_DIR="/home/${DEPLOY_USER}/${DEPLOY_PATH}"
 REMOTE_APP_DIR="${REMOTE_BASE_DIR}/umaibou-monster-game-server"
@@ -24,7 +31,7 @@ FAILED_DIR="${REMOTE_BASE_DIR}/umaibou-monster-game-server.failed"
 
 # バックアップの存在確認
 echo "Checking for backup..."
-BACKUP_EXISTS=$(tsh ssh ${REMOTE_TARGET} "[ -d ${BACKUP_DIR} ] && echo 'yes' || echo 'no'")
+BACKUP_EXISTS=$(tsh ${TSH_OPTS} ssh ${REMOTE_TARGET} "[ -d ${BACKUP_DIR} ] && echo 'yes' || echo 'no'")
 
 if [ "$BACKUP_EXISTS" != "yes" ]; then
     echo -e "${RED}Error: No backup found. Cannot rollback.${NC}"
@@ -33,7 +40,7 @@ fi
 
 # サービス停止
 echo -e "${YELLOW}Stopping current service...${NC}"
-tsh ssh ${REMOTE_TARGET} << EOF
+tsh ${TSH_OPTS} ssh ${REMOTE_TARGET} << EOF
     if pgrep -f umaibou-monster-game-server > /dev/null; then
         echo "Stopping service..."
         pkill -TERM -f umaibou-monster-game-server || true
@@ -46,7 +53,7 @@ EOF
 
 # ロールバック実行
 echo -e "${YELLOW}Restoring backup...${NC}"
-tsh ssh ${REMOTE_TARGET} << EOF
+tsh ${TSH_OPTS} ssh ${REMOTE_TARGET} << EOF
     # 現在のバージョンを一時的に保存
     if [ -d "${REMOTE_APP_DIR}" ]; then
         rm -rf "${FAILED_DIR}"
@@ -61,7 +68,7 @@ EOF
 
 # サービス再起動
 echo -e "${YELLOW}Starting previous version...${NC}"
-tsh ssh ${REMOTE_TARGET} << EOF
+tsh ${TSH_OPTS} ssh ${REMOTE_TARGET} << EOF
     cd ${REMOTE_APP_DIR}
     nohup ./umaibou-monster-game-server > server.log 2>&1 &
     echo \$! > server.pid
@@ -70,7 +77,7 @@ EOF
 
 # ヘルスチェック
 sleep 3
-tsh ssh ${REMOTE_TARGET} << EOF
+tsh ${TSH_OPTS} ssh ${REMOTE_TARGET} << EOF
     if pgrep -f umaibou-monster-game-server > /dev/null; then
         echo "✓ Service is running"
     else
