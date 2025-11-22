@@ -156,7 +156,8 @@ wscat -c "ws://localhost:8080/ws?player_id=player_a"
 └── doc/
     ├── specification.md        # 仕様書
     ├── testing-guide.md        # テスト手順書
-    └── websocket-messages.md   # メッセージサンプル集
+    ├── websocket-messages.md   # メッセージサンプル集
+    └── matching_flow.md        # マッチング詳細フロー
 ```
 
 ## 🏗️ アーキテクチャ
@@ -213,4 +214,5 @@ ctx.run_interval(Duration::from_millis(16), |act, _ctx| {
 - [仕様書](doc/specification.md)
 - [テスト手順書](doc/testing-guide.md)
 - [WebSocketメッセージ仕様](doc/websocket-messages.md)
+- [マッチング詳細フロー](doc/matching_flow.md)
 - [actix-web公式ドキュメント](https://actix.rs/)
