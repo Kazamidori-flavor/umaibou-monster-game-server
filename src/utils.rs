@@ -38,6 +38,7 @@ pub fn normalize_vector3(v: &Vector3) -> Vector3 {
 }
 
 /// 2点間の距離
+#[allow(dead_code)]
 pub fn distance(a: &Vector3, b: &Vector3) -> f32 {
     let dx = b.x - a.x;
     let dy = b.y - a.y;

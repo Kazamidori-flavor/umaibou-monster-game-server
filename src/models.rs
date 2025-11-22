@@ -11,6 +11,7 @@ pub enum SizeType {
 }
 
 impl SizeType {
+    #[allow(dead_code)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "Small" => Some(SizeType::Small),
@@ -20,6 +21,7 @@ impl SizeType {
         }
     }
 
+    #[allow(dead_code)]
     pub fn to_string(&self) -> String {
         match self {
             SizeType::Small => "Small".to_string(),
@@ -69,6 +71,7 @@ pub struct Vector3 {
 }
 
 impl Vector3 {
+    #[allow(dead_code)]
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
@@ -165,6 +168,7 @@ pub struct MatchingSession {
 }
 
 impl MatchingSession {
+    #[allow(dead_code)]
     pub fn new(player_a_id: String) -> Self {
         Self {
             matching_id: Uuid::new_v4(),
@@ -220,13 +224,18 @@ impl MatchingSession {
 // 操作入力種別
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InputAction {
-    Move { direction: Vector3, speed: f32 },
+    Move {
+        direction: Vector3,
+        speed: f32,
+    },
     Attack {
         attack_type: AttackType,
         position: Vector3,
         direction: Vector3,
     },
-    Rotate { rotation: Vector3 },
+    Rotate {
+        rotation: Vector3,
+    },
 }
 
 // プレイヤー操作入力

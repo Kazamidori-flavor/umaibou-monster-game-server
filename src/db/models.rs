@@ -137,6 +137,7 @@ impl Monster {
     }
 
     /// IDでモンスターを削除
+    #[allow(dead_code)]
     pub async fn delete_by_id(pool: &SqlitePool, id: &str) -> Result<bool, sqlx::Error> {
         let result = sqlx::query!("DELETE FROM monsters WHERE id = ?", id)
             .execute(pool)
