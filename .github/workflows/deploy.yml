@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  RUST_VERSION: "1.70"
+  RUST_VERSION: "1.89"
   TELEPORT_VERSION: "14.3.0"
   TELEPORT_PROXY: teleport.localhouse.jp:443
   DEPLOY_SERVER: ct108
