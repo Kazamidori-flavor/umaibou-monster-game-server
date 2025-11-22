@@ -240,14 +240,10 @@ Note over PlayerA,PlayerB: GameStartはGameManagerのみが送信し、重複送
   "data": {
     "matching_id": "a1b2c3d4-...",
     "opponent_id": "player_b",
-    "model_data": null,
-    "monster_stats": null,
     "timestamp": "2025-11-22T14:30:01Z"
   }
 }
 ```
-
-**注意:** `monster_stats`は`Ready`メッセージ送信時に`OpponentCharacterSelected`で送信されます。
 
 #### 3.4 他の待機中プレイヤーへの通知
 

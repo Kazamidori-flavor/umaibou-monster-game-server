@@ -313,8 +313,6 @@ wscat -c "ws://localhost:8080/ws"
   "data": {
     "matching_id": "550e8400-e29b-41d4-a716-446655440000",
     "opponent_id": "player_a",
-    "model_data": null,
-    "monster_stats": null,
     "timestamp": "2025-11-22T12:35:05.456Z"
   }
 }
@@ -323,7 +321,6 @@ wscat -c "ws://localhost:8080/ws"
 **確認ポイント：**
 - ✅ 両プレイヤーに`MatchingEstablished`が届く
 - ✅ `opponent_id`で相手のIDが分かる
-- ✅ `monster_stats`は`null`(Ready送信時に`OpponentCharacterSelected`で送信される)
 - ✅ マッチング成立
 
 ### キャラクター選択とゲーム開始

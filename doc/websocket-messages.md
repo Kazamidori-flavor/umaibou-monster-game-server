@@ -152,14 +152,10 @@ wscat -c "ws://localhost:8080/ws?matching_id=<MATCHING_ID>"
   "data": {
     "matching_id": "550e8400-e29b-41d4-a716-446655440000",
     "opponent_id": "player_b",
-    "model_data": null,
-    "monster_stats": null,
     "timestamp": "2025-11-22T14:31:00Z"
   }
 }
 ```
-
-**注意:** `monster_stats`は`Ready`メッセージ送信時に`OpponentCharacterSelected`で送信されます。
 
 ### 4. OpponentCharacterSelected
 
