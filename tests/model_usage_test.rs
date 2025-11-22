@@ -44,15 +44,24 @@ async fn test_model_one_time_use() {
         .await
         .expect("Failed to run migrations");
 
-    // Insert a model directly
+    // Insert a monster directly
     let model = Model3D::new(
         model_id.clone(),
+        "Test Monster".to_string(),  // name
+        100,                           // max_hp
+        10,                            // short_range_attack_power
+        5,                             // long_range_attack_power
+        5,                             // defense_power
+        10,                            // move_speed
+        2,                             // attack_range
+        1000,                          // attack_cooldown
+        "Medium".to_string(),          // size_type
         "test.glb".to_string(),
         "uploads/test.glb".to_string(),
         1024,
         "model/gltf-binary".to_string(),
     );
-    model.insert(&pool).await.expect("Failed to insert model");
+    model.insert(&pool).await.expect("Failed to insert monster");
 
     // Start server with this pool
     let pool_clone = pool.clone();

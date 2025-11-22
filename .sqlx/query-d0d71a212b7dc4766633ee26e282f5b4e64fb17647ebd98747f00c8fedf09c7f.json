@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO monsters (\n                id, name, max_hp, short_range_attack_power, long_range_attack_power,\n                defense_power, move_speed, attack_range, attack_cooldown, size_type,\n                file_name, file_path, file_size, mime_type, uploaded_at, is_used\n            )\n            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 16
+    },
+    "nullable": []
+  },
+  "hash": "d0d71a212b7dc4766633ee26e282f5b4e64fb17647ebd98747f00c8fedf09c7f"
+}

@@ -78,8 +78,18 @@ pub async fn load_test_models(pool: &SqlitePool) {
             }
         };
 
+        // テストモンスターのデフォルト情報
         let model = Model3D::new(
             model_id.to_string(),
+            "Test Monster".to_string(), // name
+            100,                         // max_hp
+            10,                          // short_range_attack_power
+            5,                           // long_range_attack_power
+            5,                           // defense_power
+            10,                          // move_speed
+            2,                           // attack_range
+            1000,                        // attack_cooldown (ms)
+            "Medium".to_string(),        // size_type
             Path::new(&file_path)
                 .file_name()
                 .unwrap()

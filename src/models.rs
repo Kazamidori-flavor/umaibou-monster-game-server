@@ -2,6 +2,64 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+// モンスターサイズ種別
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SizeType {
+    Small,
+    Medium,
+    Large,
+}
+
+impl SizeType {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Small" => Some(SizeType::Small),
+            "Medium" => Some(SizeType::Medium),
+            "Large" => Some(SizeType::Large),
+            _ => None,
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            SizeType::Small => "Small".to_string(),
+            SizeType::Medium => "Medium".to_string(),
+            SizeType::Large => "Large".to_string(),
+        }
+    }
+}
+
+// モンスターステータス情報（クライアント送信用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonsterStats {
+    pub name: String,
+    pub max_hp: i64,
+    pub short_range_attack_power: i64,
+    pub long_range_attack_power: i64,
+    pub defense_power: i64,
+    pub move_speed: i64,
+    pub attack_range: i64,
+    pub attack_cooldown: i64,
+    pub size_type: String,
+}
+
+impl MonsterStats {
+    /// MonsterからMonsterStatsを生成
+    pub fn from_monster(monster: &crate::db::models::Monster) -> Self {
+        Self {
+            name: monster.name.clone(),
+            max_hp: monster.max_hp,
+            short_range_attack_power: monster.short_range_attack_power,
+            long_range_attack_power: monster.long_range_attack_power,
+            defense_power: monster.defense_power,
+            move_speed: monster.move_speed,
+            attack_range: monster.attack_range,
+            attack_cooldown: monster.attack_cooldown,
+            size_type: monster.size_type.clone(),
+        }
+    }
+}
+
 // 3Dベクトル（位置・方向）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vector3 {
@@ -159,22 +217,11 @@ impl MatchingSession {
     }
 }
 
-// 攻撃種別
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AttackType {
-    Melee,  // 近距離攻撃
-    Ranged, // 遠距離攻撃
-}
-
 // 操作入力種別
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InputAction {
     Move { direction: Vector3, speed: f32 },
-    Attack {
-        attack_type: AttackType,
-        position: Vector3,  // 攻撃を行った位置
-        direction: Vector3, // 攻撃の方向
-    },
+    Attack { target_position: Vector3 },
     Rotate { rotation: Vector3 },
 }
 
@@ -251,7 +298,8 @@ pub enum WsMessage {
     MatchingEstablished {
         matching_id: Uuid,
         opponent_id: String,
-        model_data: Option<crate::db::models::Model3D>,
+        model_data: Option<crate::db::models::Model3D>, // 3Dモデルファイル情報（後方互換性）
+        monster_stats: Option<MonsterStats>,            // モンスターステータス情報
         timestamp: DateTime<Utc>,
     },
     MatchingSuccess {
@@ -261,6 +309,7 @@ pub enum WsMessage {
     },
     OpponentCharacterSelected {
         character: Character,
+        monster_stats: Option<MonsterStats>, // モンスターステータス情報
         timestamp: DateTime<Utc>,
     },
     GameStart {
@@ -291,6 +340,19 @@ pub enum WsMessage {
 }
 
 // 3Dモデルアップロード関連
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MonsterInfo {
+    pub name: String,
+    pub max_hp: i64,
+    pub short_range_attack_power: i64,
+    pub long_range_attack_power: i64,
+    pub defense_power: i64,
+    pub move_speed: i64,
+    pub attack_range: i64,
+    pub attack_cooldown: i64,
+    pub size_type: String, // "Small", "Medium", "Large"
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UploadModelResponse {
     pub model_id: String,

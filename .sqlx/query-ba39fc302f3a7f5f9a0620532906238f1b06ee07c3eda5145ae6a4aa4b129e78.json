@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM monsters WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "ba39fc302f3a7f5f9a0620532906238f1b06ee07c3eda5145ae6a4aa4b129e78"
+}

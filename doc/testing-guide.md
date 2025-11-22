@@ -138,44 +138,74 @@ wscat --version
 npm install -g wscat
 ```
 
-### 3Dモデルのアップロード
+### 3Dモデル（モンスター）のアップロード
 
-ゲームで使用する3Dモデル（GLB形式）を事前にアップロードし、`model_id`を取得します。
+ゲームで使用する3Dモデル（GLB形式）を事前にアップロードし、`monster_id`（旧`model_id`）を取得します。
+このとき、モンスターの基本ステータスも一緒に登録します。
 
 ```bash
 # 3Dモデルをアップロード（GLB形式）
 curl -X POST http://localhost:8080/api/models/upload \
-  -F "file=@/path/to/your/model.glb"
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@/path/to/your/monster.glb" \
+  -F "name=Slime" \
+  -F "max_hp=100" \
+  -F "short_range_attack_power=10" \
+  -F "long_range_attack_power=5" \
+  -F "defense_power=3" \
+  -F "move_speed=2" \
+  -F "attack_range=1" \
+  -F "attack_cooldown=1000" \
+  -F "size_type=Small"
 
 # レスポンス例:
 # {
-#   "model_id": "9e7d246b-57cd-47de-94f1-4192f3dc075e",
-#   "file_name": "model.glb",
+#   "monster_id": "9e7d246b-57cd-47de-94f1-4192f3dc075e",
+#   "name": "Slime",
+#   "max_hp": 100,
+#   "short_range_attack_power": 10,
+#   "long_range_attack_power": 5,
+#   "defense_power": 3,
+#   "move_speed": 2,
+#   "attack_range": 1,
+#   "attack_cooldown": 1000,
+#   "size_type": "Small",
+#   "file_name": "monster.glb",
 #   "file_size": 1024000,
-#   "uploaded_at": "2025-11-22T12:00:00.000Z"
+#   "uploaded_at": "2025-11-22T12:00:00.000Z",
+#   "is_used": false
 # }
 ```
 
 **確認ポイント:**
 - ✅ ファイルサイズ < 50MB
 - ✅ GLB形式（model/gltf-binary）
-- ✅ `model_id`をメモしておく（キャラクター選択で使用）
+- ✅ `monster_id`をメモしておく（キャラクター選択で使用）
 
 **アップロード済みモデル一覧の取得:**
 
 ```bash
-# 利用可能なモデル一覧を取得
+# 利用可能なモンスター一覧を取得
 curl http://localhost:8080/api/models
 
 # レスポンス例:
 # {
-#   "models": [
+#   "monsters": [
 #     {
-#       "model_id": "9e7d246b-57cd-47de-94f1-4192f3dc075e",
+#       "monster_id": "9e7d246b-57cd-47de-94f1-4192f3dc075e",
+#       "name": "Warrior",
+#       "max_hp": 100,
+#       "short_range_attack_power": 20,
+#       "long_range_attack_power": 0,
+#       "defense_power": 5,
+#       "move_speed": 3,
+#       "attack_range": 1,
+#       "attack_cooldown": 800,
+#       "size_type": "Medium",
 #       "file_name": "warrior.glb",
 #       "file_size": 1024000,
-#       "is_used": false,
-#       "uploaded_at": "2025-11-22T12:00:00.000Z"
+#       "uploaded_at": "2025-11-22T12:00:00.000Z",
+#       "is_used": false
 #     }
 #   ]
 # }
@@ -281,6 +311,24 @@ wscat -c "ws://localhost:8080/ws"
   "data": {
     "matching_id": "550e8400-e29b-41d4-a716-446655440000",
     "opponent_id": "player_a",
+    "model_data": {
+      "monster_id": "9e7d246b-57cd-47de-94f1-4192f3dc075e",
+      "file_name": "warrior.glb",
+      "file_size": 1024000,
+      "uploaded_at": "2025-11-22T12:00:00.000Z",
+      "is_used": false
+    },
+    "monster_stats": {
+      "name": "Warrior",
+      "max_hp": 100,
+      "short_range_attack_power": 20,
+      "long_range_attack_power": 0,
+      "defense_power": 5,
+      "move_speed": 3,
+      "attack_range": 1,
+      "attack_cooldown": 800,
+      "size_type": "Medium"
+    },
     "timestamp": "2025-11-22T12:35:05.456Z"
   }
 }
@@ -289,6 +337,7 @@ wscat -c "ws://localhost:8080/ws"
 **確認ポイント：**
 - ✅ 両プレイヤーに`MatchingEstablished`が届く
 - ✅ `opponent_id`で相手のIDが分かる
+- ✅ `monster_stats`に相手のモンスターのステータス情報が含まれる
 - ✅ マッチング成立
 
 ### キャラクター選択とゲーム開始
@@ -316,6 +365,17 @@ wscat -c "ws://localhost:8080/ws"
       "hp": 100,
       "max_hp": 100
     },
+    "monster_stats": {
+      "name": "Slime",
+      "max_hp": 100,
+      "short_range_attack_power": 10,
+      "long_range_attack_power": 5,
+      "defense_power": 3,
+      "move_speed": 2,
+      "attack_range": 1,
+      "attack_cooldown": 1000,
+      "size_type": "Small"
+    },
     "timestamp": "2025-11-22T12:35:10.123Z"
   }
 }
@@ -341,6 +401,17 @@ wscat -c "ws://localhost:8080/ws"
       "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
       "hp": 100,
       "max_hp": 100
+    },
+    "monster_stats": {
+      "name": "Warrior",
+      "max_hp": 100,
+      "short_range_attack_power": 20,
+      "long_range_attack_power": 0,
+      "defense_power": 5,
+      "move_speed": 3,
+      "attack_range": 1,
+      "attack_cooldown": 800,
+      "size_type": "Medium"
     },
     "timestamp": "2025-11-22T12:35:12.456Z"
   }
@@ -450,44 +521,18 @@ wscat -c "ws://localhost:8080/ws"
 
 #### 8. 攻撃入力テスト
 
-**近距離攻撃:**
-
 ```json
 {
   "type": "Input",
   "data": {
     "action": {
       "Attack": {
-        "attack_type": "Melee",
-        "position": {"x": 10.0, "y": 0.0, "z": 5.0},
-        "direction": {"x": 1.0, "y": 0.0, "z": 0.0}
+        "target_position": {"x": 10.0, "y": 0.0, "z": 5.0}
       }
     }
   }
 }
 ```
-
-**遠距離攻撃:**
-
-```json
-{
-  "type": "Input",
-  "data": {
-    "action": {
-      "Attack": {
-        "attack_type": "Ranged",
-        "position": {"x": 15.0, "y": 2.0, "z": 8.0},
-        "direction": {"x": 0.0, "y": 0.0, "z": 1.0}
-      }
-    }
-  }
-}
-```
-
-**パラメータ:**
-- `attack_type`: 攻撃種別（`"Melee"`: 近距離、`"Ranged"`: 遠距離）
-- `position`: 攻撃を行った位置（3Dベクトル）
-- `direction`: 攻撃の方向（3Dベクトル）
 
 ---
 
@@ -499,10 +544,40 @@ wscat -c "ws://localhost:8080/ws"
 # ターミナル1: サーバー起動
 cargo run
 
-# ターミナル2: プレイヤーA WebSocket接続
+# ターミナル2: 3Dモデルアップロード (Slime)
+curl -X POST http://localhost:8080/api/models/upload \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@/path/to/your/slime.glb" \
+  -F "name=Slime" \
+  -F "max_hp=100" \
+  -F "short_range_attack_power=10" \
+  -F "long_range_attack_power=5" \
+  -F "defense_power=3" \
+  -F "move_speed=2" \
+  -F "attack_range=1" \
+  -F "attack_cooldown=1000" \
+  -F "size_type=Small"
+# => monster_idをメモ: SLIME_MONSTER_ID
+
+# ターミナル3: 3Dモデルアップロード (Warrior)
+curl -X POST http://localhost:8080/api/models/upload \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@/path/to/your/warrior.glb" \
+  -F "name=Warrior" \
+  -F "max_hp=100" \
+  -F "short_range_attack_power=20" \
+  -F "long_range_attack_power=0" \
+  -F "defense_power=5" \
+  -F "move_speed=3" \
+  -F "attack_range=1" \
+  -F "attack_cooldown=800" \
+  -F "size_type=Medium"
+# => monster_idをメモ: WARRIOR_MONSTER_ID
+
+# ターミナル4: プレイヤーA WebSocket接続
 wscat -c "ws://localhost:8080/ws"
 
-# ターミナル3: プレイヤーB WebSocket接続（ロビー待機）
+# ターミナル5: プレイヤーB WebSocket接続（ロビー待機）
 wscat -c "ws://localhost:8080/ws"
 
 # プレイヤーA: マッチング作成
@@ -513,17 +588,17 @@ wscat -c "ws://localhost:8080/ws"
 # プレイヤーB: マッチング参加
 > {"type":"JoinMatch","data":{"matching_id":"<matching_id>"}}
 
-# 両方で"MatchingEstablished"を受信確認
+# 両方で"MatchingEstablished"を受信確認 (model_dataとmonster_statsを含む)
 
-# プレイヤーA: キャラクター選択（Ready + model_id）
-> {"type":"Ready","data":{"selected_model_id":"9e7d246b-57cd-47de-94f1-4192f3dc075e"}}
+# プレイヤーA: キャラクター選択（Ready + monster_id）
+> {"type":"Ready","data":{"selected_model_id":"<SLIME_MONSTER_ID>"}}
 
-# プレイヤーBで"OpponentCharacterSelected"を受信
+# プレイヤーBで"OpponentCharacterSelected"を受信 (monster_statsを含む)
 
-# プレイヤーB: キャラクター選択（Ready + model_id）
-> {"type":"Ready","data":{"selected_model_id":"7d246bdd-57cd-47de-94f1-4192f3dc075e"}}
+# プレイヤーB: キャラクター選択（Ready + monster_id）
+> {"type":"Ready","data":{"selected_model_id":"<WARRIOR_MONSTER_ID>"}}
 
-# プレイヤーAで"OpponentCharacterSelected"を受信
+# プレイヤーAで"OpponentCharacterSelected"を受信 (monster_statsを含む)
 
 # 両方で"GameStart"を受信確認
 
@@ -546,13 +621,13 @@ wscat -c "ws://localhost:8080/ws"
 - [ ] プレイヤーA: MatchingCreated受信（matching_id取得）
 - [ ] プレイヤーB: UpdateMatchings自動受信（ロビー待機中に受信することを確認）
 - [ ] プレイヤーB: JoinMatch送信成功
-- [ ] 両プレイヤー: MatchingEstablished受信確認
+- [ ] 両プレイヤー: MatchingEstablished受信確認（`monster_stats`が含まれること）
 
 **ゲームフロー：**
-- [ ] プレイヤーA: Ready送信でキャラクター選択
-- [ ] プレイヤーB: OpponentCharacterSelected受信
-- [ ] プレイヤーB: Ready送信でキャラクター選択
-- [ ] プレイヤーA: OpponentCharacterSelected受信
+- [ ] プレイヤーA: Ready送信でキャラクター選択（`monster_id`を使用）
+- [ ] プレイヤーB: OpponentCharacterSelected受信（`monster_stats`が含まれること）
+- [ ] プレイヤーB: Ready送信でキャラクター選択（`monster_id`を使用）
+- [ ] プレイヤーA: OpponentCharacterSelected受信（`monster_stats`が含まれること）
 - [ ] 両プレイヤー: GameStart受信
 
 **状態更新：**
