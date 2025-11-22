@@ -9,7 +9,7 @@
 3. [REST API動作確認（レガシー）](#rest-api動作確認レガシー)
 4. [🆕 WebSocket動作確認（新仕様）](#websocket動作確認新仕様)
 5. [エンドツーエンドフロー確認](#エンドツーエンドフロー確認)
-6. [🆕 WebSocketマッチングフローの利点](#websocketマッチングフローの利点)
+6. [🆕 WebSocketマッチングフローの利点](#-websocketマッチングフローの利点)
 7. [トラブルシューティング](#トラブルシューティング)
 8. [パフォーマンステスト](#パフォーマンステスト)
 9. [まとめ](#まとめ)
@@ -222,7 +222,9 @@ wscat -c "ws://localhost:8080/ws"
 
 **期待される動作：**
 - WebSocket接続が確立
-- サーバーが自動的にplayer_idを生成
+- サーバーが自動的にplayer_idを生成(UUID形式)
+
+**補足:** player_idパラメータは不要です。サーバーが自動的に生成します。
 
 #### ステップ2: マッチング作成
 
@@ -258,7 +260,7 @@ wscat -c "ws://localhost:8080/ws"
 - ✅ `matching_id`が返される（マッチング待機中）
 - ✅ `current_matchings`は空（自分以外のマッチング待ち無し）
 
-**matching_idをメモしておく**
+#### matching_idをメモしておく
 
 **補足:** この時点で、ロビーに接続している他の全プレイヤー（マッチング未参加者）にも`UpdateMatchings`がブロードキャストされます。
 
@@ -311,24 +313,6 @@ wscat -c "ws://localhost:8080/ws"
   "data": {
     "matching_id": "550e8400-e29b-41d4-a716-446655440000",
     "opponent_id": "player_a",
-    "model_data": {
-      "monster_id": "9e7d246b-57cd-47de-94f1-4192f3dc075e",
-      "file_name": "warrior.glb",
-      "file_size": 1024000,
-      "uploaded_at": "2025-11-22T12:00:00.000Z",
-      "is_used": false
-    },
-    "monster_stats": {
-      "name": "Warrior",
-      "max_hp": 100,
-      "short_range_attack_power": 20,
-      "long_range_attack_power": 0,
-      "defense_power": 5,
-      "move_speed": 3,
-      "attack_range": 1,
-      "attack_cooldown": 800,
-      "size_type": "Medium"
-    },
     "timestamp": "2025-11-22T12:35:05.456Z"
   }
 }
@@ -337,7 +321,6 @@ wscat -c "ws://localhost:8080/ws"
 **確認ポイント：**
 - ✅ 両プレイヤーに`MatchingEstablished`が届く
 - ✅ `opponent_id`で相手のIDが分かる
-- ✅ `monster_stats`に相手のモンスターのステータス情報が含まれる
 - ✅ マッチング成立
 
 ### キャラクター選択とゲーム開始

@@ -4,7 +4,7 @@ use crate::game::state::GameStateManager;
 use crate::handlers::{LobbyPlayers, MatchingSessions, WaitingPlayers, WsChannels};
 use crate::models::{MatchingStatus, WsMessage};
 use actix::prelude::*;
-use actix_web::{Error, HttpRequest, HttpResponse, web};
+use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use sqlx::SqlitePool;
 use std::time::{Duration, Instant};
@@ -355,8 +355,6 @@ impl WsSession {
                 let msg = crate::models::WsMessage::MatchingEstablished {
                     matching_id,
                     opponent_id: player_id_clone.clone(),
-                    model_data: None,
-                    monster_stats: None, // Ready時に送信
                     timestamp: chrono::Utc::now(),
                 };
                 println!(
@@ -373,8 +371,6 @@ impl WsSession {
                 let msg = crate::models::WsMessage::MatchingEstablished {
                     matching_id,
                     opponent_id: player_a_id.clone(),
-                    model_data: None,
-                    monster_stats: None, // Ready時に送信
                     timestamp: chrono::Utc::now(),
                 };
                 println!(

@@ -328,8 +328,6 @@ pub enum WsMessage {
     MatchingEstablished {
         matching_id: Uuid,
         opponent_id: String,
-        model_data: Option<crate::db::models::Model3D>, // 3Dモデルファイル情報（後方互換性）
-        monster_stats: Option<MonsterStats>,            // モンスターステータス情報
         timestamp: DateTime<Utc>,
     },
     MatchingSuccess {
