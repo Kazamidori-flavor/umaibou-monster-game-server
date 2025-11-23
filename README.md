@@ -40,19 +40,6 @@ actix-webで実装した3Dリアルタイム対戦ゲームのサーバーです
 - **デプロイ方法**: GitHub Actions + Teleport Machine ID (OIDC)
 - **デプロイ先**: `ct108` (Teleport経由)
 
-### セットアップ
-
-#### GitHub Actions Secrets
-
-GitHubリポジトリの設定で以下のSecrets/Variablesを設定します：
-
-- **Secrets**:
-  - `TELEPORT_JOIN_TOKEN`: Teleport Machine ID用のJoin Token
-
-- **Variables**:
-  - `TELEPORT_PROXY`: Teleportプロキシのアドレス（例: `teleport.localhouse.jp:443`）
-  - `DEPLOY_USER`: デプロイ先のOSユーザー名（例: `gohan`）
-
 ### デプロイフロー
 
 1. **開発**: `feature/*` ブランチで開発し、`main` にプルリクエストを作成・マージ。
