@@ -152,6 +152,18 @@ cargo test
 
 ```mermaid
 graph TB
+    subgraph "CI/CD Pipeline"
+        Dev[Developer<br/>Push to main]
+        GHA[GitHub Actions<br/>Ubuntu Runner]
+        Build[Cargo Build<br/>x86_64-musl]
+        Deploy[Deploy Script<br/>SSH + Cloudflared]
+    end
+
+    subgraph "Production Server - ct108"
+        Systemd[systemd Service<br/>Auto-restart]
+        Binary[Game Server Binary<br/>umaibou-monster-game-server]
+    end
+
     subgraph "Client Layer"
         Client[Web Client<br/>WebSocket + REST API]
     end
@@ -193,9 +205,20 @@ graph TB
         WsMsg[WsMessage<br/>Protocol Types]
     end
 
+    %% CI/CD Flow
+    Dev -->|git push| GHA
+    GHA -->|1. Build| Build
+    Build -->|2. Deploy| Deploy
+    Deploy -->|SSH via Cloudflared| Systemd
+    Systemd -->|Manages| Binary
+
+    %% Server Runtime
+    Binary --> HTTP
+    Binary --> WS
+    Binary --> ModelUpload
+
     %% Client → Server
-    Client -->|REST: POST /api/matching| HTTP
-    Client -->|REST: POST /api/upload_model| ModelUpload
+    Client -->|REST API| HTTP
     Client -->|WebSocket: /ws| WS
 
     %% HTTP Handlers
@@ -237,6 +260,10 @@ graph TB
     HTTP -.->|Runs on| Tokio
     SQLite -.->|Async via| Tokio
 
+    style GHA fill:#2088ff
+    style Build fill:#28a745
+    style Deploy fill:#fd7e14
+    style Systemd fill:#6f42c1
     style GM fill:#ff6b6b
     style GSM fill:#4ecdc4
     style WS fill:#45b7d1
