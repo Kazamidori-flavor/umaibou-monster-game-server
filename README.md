@@ -94,8 +94,12 @@ GET /api/models
 
 #### 接続
 
-```
+```bash
+# ローカル開発環境
 ws://localhost:8080/ws
+
+# 本番環境
+wss://uma-mon.localhouse.jp/ws
 ```
 
 ※ `player_id` や `matching_id` のクエリパラメータは不要になりました。
@@ -179,6 +183,25 @@ cargo test
 #### モデルの使い切り運用
 
 公平性やゲーム性を高めるため、一度の対戦で使用された3Dモデル（モンスター）は「使用済み」となり、次の対戦では選択できなくなります。
+
+## 🌐 本番環境
+
+本番環境で API をテストする場合:
+
+```bash
+# REST API
+curl -X POST https://uma-mon.localhouse.jp/api/models/upload \
+  -F "file=@test.glb" \
+  -F 'monster_data={"name":"テストモンスター","max_hp":100,"short_range_attack_power":15,"long_range_attack_power":10,"defense_power":12,"move_speed":150,"attack_range":250,"attack_cooldown":150,"size_type":"MEDIUM"}'
+
+# WebSocket接続
+wscat -c "wss://uma-mon.localhouse.jp/ws"
+
+# スクリプトでのテスト
+API_BASE_URL=https://uma-mon.localhouse.jp ./scripts/test_api.sh
+```
+
+**注意**: `monster_data` の全数値フィールドは整数型 (i64) です。
 
 ## 📚 参考資料
 

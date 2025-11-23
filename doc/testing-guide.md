@@ -780,3 +780,55 @@ done
 - 統一されたメッセージフォーマット
 
 問題があれば、サーバーログとクライアント側のメッセージを確認してください。
+
+---
+
+## 🌐 本番環境でのテスト
+
+本番環境 (`https://uma-mon.localhouse.jp`) でテストする場合は、以下のように URL を置き換えてください。
+
+### REST API（本番環境）
+
+```bash
+# ヘルスチェック
+curl https://uma-mon.localhouse.jp/
+
+# モデルアップロード（全フィールドは整数型）
+curl -X POST https://uma-mon.localhouse.jp/api/models/upload \
+  -F "file=@test.glb" \
+  -F 'monster_data={"name":"テストモンスター","max_hp":100,"short_range_attack_power":15,"long_range_attack_power":10,"defense_power":12,"move_speed":150,"attack_range":250,"attack_cooldown":150,"size_type":"MEDIUM"}'
+
+# モデル一覧取得
+curl https://uma-mon.localhouse.jp/api/models
+```
+
+### WebSocket接続（本番環境）
+
+```bash
+# WebSocket接続（wss:// を使用）
+wscat -c "wss://uma-mon.localhouse.jp/ws"
+
+# マッチング作成
+> {"type":"CreateMatching","data":{"selected_model_id":"your-model-id"}}
+
+# マッチング参加
+> {"type":"JoinMatch","data":{"matching_id":"matching-id","selected_model_id":"your-model-id"}}
+```
+
+### スクリプトでの本番環境テスト
+
+```bash
+# test_api.sh を本番環境で実行
+API_BASE_URL=https://uma-mon.localhouse.jp ./scripts/test_api.sh
+
+# demo_model_download.sh を本番環境で実行
+API_BASE_URL=https://uma-mon.localhouse.jp ./scripts/demo_model_download.sh
+```
+
+### 本番環境での注意点
+
+- **HTTPS/WSS**: 本番環境では暗号化通信を使用します
+- **整数型フィールド**: `monster_data` の全数値フィールドは整数 (i64) 型です
+  - 例: `move_speed: 150` （1.5 ではなく 150 として送信）
+- **CORS**: 本番環境では適切な CORS 設定が必要です
+- **認証**: 将来的に認証機能が追加される可能性があります
