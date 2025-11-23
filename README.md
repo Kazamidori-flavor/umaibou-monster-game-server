@@ -165,6 +165,104 @@ cargo test
 
 ## 🏗️ アーキテクチャ
 
+### システム構成図
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        Client[Web Client<br/>WebSocket + REST API]
+    end
+
+    subgraph "actix-web Server"
+        HTTP[HTTP Server<br/>actix-web 4.12]
+        WS[WebSocket Handler<br/>WsSession]
+        ModelUpload[Model Upload Handler<br/>3D GLB Files]
+    end
+
+    subgraph "Game Core - Actor System"
+        GM[Game Manager Actor<br/>60Hz Game Loop<br/>actix 0.13]
+        GSM[Game State Manager<br/>State Calculation Logic]
+
+        subgraph "Actor Messages"
+            StartGame[StartGame]
+            ProcessInput[ProcessInput]
+            ProcessStateUpdate[ProcessStateUpdate]
+            ApplyDamage[ApplyDamage]
+        end
+    end
+
+    subgraph "State Management"
+        Sessions[Matching Sessions<br/>Arc&lt;Mutex&lt;HashMap&gt;&gt;]
+        GameStates[Game States<br/>Arc&lt;Mutex&lt;HashMap&gt;&gt;]
+        Channels[Message Channels<br/>mpsc::unbounded]
+    end
+
+    subgraph "Data Layer"
+        SQLite[(SQLite Database<br/>sqlx 0.7)]
+        Files[File Storage<br/>uploads/models/]
+    end
+
+    subgraph "Data Models"
+        Vector3[Vector3<br/>3D Coordinates]
+        Character[Character<br/>Monster Stats]
+        Player[Player<br/>Position, HP, SP]
+        GameState[GameState<br/>Game Snapshot]
+        WsMsg[WsMessage<br/>Protocol Types]
+    end
+
+    %% Client → Server
+    Client -->|REST: POST /api/matching| HTTP
+    Client -->|REST: POST /api/upload_model| ModelUpload
+    Client -->|WebSocket: /ws| WS
+
+    %% HTTP Handlers
+    HTTP --> Sessions
+    ModelUpload --> Files
+    ModelUpload --> SQLite
+
+    %% WebSocket Flow
+    WS -->|Subscribe| Channels
+    WS -->|Send Input| GM
+    GM -->|Broadcast State| Channels
+    Channels -->|State Update| WS
+    WS -->|Event-Driven Updates| Client
+
+    %% Actor Messages
+    GM -->|StartGame| GM
+    GM -->|ProcessInput| GM
+    GM -->|ProcessStateUpdate| GSM
+    GM -->|ApplyDamage| GM
+
+    %% State Management
+    Sessions -->|Match Ready| GM
+    GM --> GameStates
+    GSM -->|Calculate| GameState
+
+    %% Data Models Usage
+    GameState -.->|Uses| Player
+    GameState -.->|Uses| Character
+    Player -.->|Uses| Vector3
+    WS -.->|Serializes| WsMsg
+
+    %% Runtime
+    subgraph "Async Runtime"
+        Tokio[tokio 1.41<br/>Full Features]
+        ActixRT[actix-rt 2.11]
+    end
+
+    GM -.->|Runs on| ActixRT
+    HTTP -.->|Runs on| Tokio
+    SQLite -.->|Async via| Tokio
+
+    style GM fill:#ff6b6b
+    style GSM fill:#4ecdc4
+    style WS fill:#45b7d1
+    style Sessions fill:#f7b731
+    style GameStates fill:#f7b731
+    style SQLite fill:#5f27cd
+    style Tokio fill:#00d2d3
+```
+
 ### 技術スタック
 
 - **actix-web** - HTTPサーバー
